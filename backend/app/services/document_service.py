@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.database import Document, DocumentChunk
+from app.db.models import Document, DocumentChunk
 from app.services.chunker import ChunkingConfig, ChunkingStrategy, DocumentChunker
 from app.services.document_parser import parse_document
 

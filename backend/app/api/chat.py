@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.db_connection import get_session_dependency
+from app.db.session import get_session_dependency
 from app.retrieval.hybrid import HybridRetrieval, get_hybrid_retrieval
 from app.retrieval.reranker import Reranker, get_reranker
 from app.schemas.document import AnswerRequest, AnswerResponse, Citation

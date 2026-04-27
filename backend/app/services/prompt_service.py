@@ -1,14 +1,12 @@
-"""
-Prompt templates for RAG answer generation.
-"""
+"""Prompt templates and helpers for RAG generation."""
 
+import re
 from typing import List
 
 
 class PromptTemplates:
     """Collection of prompt templates for RAG."""
 
-    # System prompt for grounded answering
     SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions based ONLY on the provided context.
 
 Your answers must:
@@ -22,7 +20,6 @@ Do NOT:
 - Hallucinate facts or figures
 - Answer questions that cannot be answered from the context"""
 
-    # User prompt template
     USER_PROMPT_TEMPLATE = """Context:
 {context}
 
@@ -35,10 +32,8 @@ Instructions:
 
 Answer:"""
 
-    # Citation format instruction
     CITATION_INSTRUCTION = """For each factual statement in your answer, include a citation in brackets showing the source document, e.g., [doc1], [document.pdf], etc."""
 
-    # Fallback prompt when no context is found
     NO_CONTEXT_PROMPT = """The question asked does not appear to be related to any uploaded documents.
 
 Question: {question}
@@ -47,24 +42,13 @@ Response: I don't have enough context to answer this question. Please upload rel
 
     @staticmethod
     def build_prompt(question: str, context_chunks: List[str]) -> str:
-        """
-        Build the full prompt with context.
-        
-        Args:
-            question: User question
-            context_chunks: List of context chunks
-            
-        Returns:
-            Formatted prompt string
-        """
+        """Build the full prompt with context."""
         if not context_chunks:
             return PromptTemplates.NO_CONTEXT_PROMPT.format(question=question)
 
-        # Format context with source markers
         context = "\n\n---\n\n".join(
-            f"[Context {i+1}]\n{chunk}" for i, chunk in enumerate(context_chunks)
+            f"[Context {i + 1}]\n{chunk}" for i, chunk in enumerate(context_chunks)
         )
-
         return PromptTemplates.USER_PROMPT_TEMPLATE.format(
             context=context,
             question=question,
@@ -75,50 +59,27 @@ Response: I don't have enough context to answer this question. Please upload rel
         """Build a formatted sources list."""
         if not sources:
             return "No sources"
-
         unique_sources = list(set(sources))
         return "Sources: " + ", ".join(f"[{s}]" for s in unique_sources)
 
 
-# Citation extraction patterns
 CITATION_PATTERNS = {
-    "bracket": r"\[([^\]]+)\]",  # [source]
-    "parenthesis": r"\(([^\)]+)\)",  # (source)
-    "superscript": r"\^(\d+)",  # ^1
+    "bracket": r"\[([^\]]+)\]",
+    "parenthesis": r"\(([^\)]+)\)",
+    "superscript": r"\^(\d+)",
 }
 
 
 def extract_citations(text: str) -> List[str]:
-    """
-    Extract all citations from generated text.
-    
-    Args:
-        text: Generated text with citations
-        
-    Returns:
-        List of cited sources
-    """
-    import re
-
-    citations = []
+    """Extract all citations from generated text."""
+    citations: List[str] = []
     for pattern in CITATION_PATTERNS.values():
-        matches = re.findall(pattern, text)
-        citations.extend(matches)
-
+        citations.extend(re.findall(pattern, text))
     return list(set(citations))
 
 
-def format_citation(source: str, page: int = None) -> str:
-    """
-    Format a citation string.
-    
-    Args:
-        source: Source document name
-        page: Optional page number
-        
-    Returns:
-        Formatted citation
-    """
+def format_citation(source: str, page: int | None = None) -> str:
+    """Format a citation string."""
     if page:
         return f"[{source} p.{page}]"
     return f"[{source}]"

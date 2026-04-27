@@ -7,8 +7,8 @@ from typing import List, Optional, Tuple
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.retrieval.bm25 import BM25Index, bm25_index
-from app.services.vector_store import VectorStore, vector_store
+from app.retrieval.bm25 import BM25Index, bm25_index as default_bm25_index
+from app.services.vector_store import VectorStore, vector_store as default_vector_store
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -34,8 +34,8 @@ class HybridRetrieval:
         vector_store: Optional[VectorStore] = None,
         bm25_index: Optional[BM25Index] = None,
     ):
-        self.vector_store = vector_store or vector_store
-        self.bm25_index = bm25_index or bm25_index
+        self.vector_store = vector_store or default_vector_store
+        self.bm25_index = bm25_index or default_bm25_index
 
     async def retrieve(
         self,

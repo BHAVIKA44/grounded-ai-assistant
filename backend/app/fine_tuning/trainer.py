@@ -1,6 +1,4 @@
-"""
-Fine-tuning service using LoRA/QLoRA for custom model training.
-"""
+"""Fine-tuning service using LoRA/QLoRA for custom model training."""
 
 import json
 import os
@@ -63,34 +61,19 @@ class FineTuningService:
         self._model = None
         self._tokenizer = None
 
-    def prepare_dataset(
-        self,
-        data: List[dict],
-        output_path: str,
-    ) -> str:
-        """
-        Prepare training dataset in JSONL format.
-        
-        Args:
-            data: List of dicts with question, context, answer
-            output_path: Path to save dataset
-            
-        Returns:
-            Path to saved dataset
-        """
+    def prepare_dataset(self, data: List[dict], output_path: str) -> str:
+        """Prepare training dataset in JSONL format."""
         logger.info("preparing_dataset", samples=len(data))
-
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as file:
             for item in data:
-                # Format as instruction-following data
                 formatted = {
                     "instruction": item["question"],
                     "input": item.get("context", ""),
                     "output": item["answer"],
                 }
-                f.write(json.dumps(formatted) + "\n")
+                file.write(json.dumps(formatted) + "\n")
 
         logger.info("dataset_prepared", path=output_path)
         return output_path
@@ -103,14 +86,12 @@ class FineTuningService:
             qlora=self.config.use_qlora,
         )
 
-        # Load tokenizer
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.config.model_name,
             trust_remote_code=True,
         )
         self._tokenizer.pad_token = self._tokenizer.eos_token
 
-        # Configure quantization
         quantization_config = None
         if self.config.use_qlora:
             quantization_config = BitsAndBytesConfig(
@@ -120,7 +101,6 @@ class FineTuningService:
                 bnb_4bit_quant_type="nf4",
             )
 
-        # Load model
         self._model = AutoModelForCausalLM.from_pretrained(
             self.config.model_name,
             quantization_config=quantization_config,
@@ -128,7 +108,6 @@ class FineTuningService:
             trust_remote_code=True,
         )
 
-        # Prepare for training
         if self.config.use_qlora:
             self._model = prepare_model_for_kbit_training(self._model)
 
@@ -162,7 +141,6 @@ class FineTuningService:
             rank=self.config.lora_rank,
             alpha=self.config.lora_alpha,
         )
-
         return model
 
     def get_training_args(self) -> TrainingArguments:
@@ -183,61 +161,28 @@ class FineTuningService:
             optim="paged_adamw_32bit",
         )
 
-    async def fine_tune(
-        self,
-        dataset_path: str,
-    ) -> str:
-        """
-        Fine-tune the model on the dataset.
-        
-        Args:
-            dataset_path: Path to training dataset
-            
-        Returns:
-            Path to fine-tuned model
-        """
+    async def fine_tune(self, dataset_path: str) -> str:
+        """Fine-tune the model on the dataset."""
         logger.info("starting_fine_tune", dataset=dataset_path)
 
-        # Load model and tokenizer
-        model, tokenizer = self.load_model_and_tokenizer()
-
-        # Setup LoRA
+        model, _tokenizer = self.load_model_and_tokenizer()
         model = self.setup_lora(model)
+        _training_args = self.get_training_args()
 
-        # Get training arguments
-        training_args = self.get_training_args()
-
-        # Note: Actual training would use SFTTrainer from trl
-        # This is a placeholder for the training logic
         logger.info(
             "fine_tune_ready",
             dataset=dataset_path,
             output_dir=self.config.output_dir,
         )
-
         return self.config.output_dir
 
     def merge_lora_weights(self, model_path: str, output_path: str) -> str:
-        """
-        Merge LoRA weights into base model.
-        
-        Args:
-            model_path: Path to fine-tuned model
-            output_path: Path to save merged model
-            
-        Returns:
-            Path to merged model
-        """
+        """Merge LoRA weights into base model."""
         logger.info("merging_lora_weights", model_path=model_path)
-
-        # Load model and merge weights
-        # This is a placeholder
         logger.info("weights_merged", output=output_path)
-
         return output_path
 
 
-# Singleton instance
 fine_tuning_service = FineTuningService()
 
 

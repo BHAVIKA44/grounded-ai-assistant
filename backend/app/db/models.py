@@ -3,22 +3,10 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import (
-    JSON,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Text,
-)
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    """Base class for all database models."""
-
-    pass
+from app.db.base import Base
 
 
 class Document(Base):
@@ -39,7 +27,6 @@ class Document(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
-    # Relationships
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         "DocumentChunk", back_populates="document", cascade="all, delete-orphan"
     )
@@ -68,7 +55,6 @@ class DocumentChunk(Base):
         DateTime, default=datetime.utcnow, nullable=False
     )
 
-    # Relationships
     document: Mapped["Document"] = relationship("Document", back_populates="chunks")
 
     __table_args__ = (
@@ -95,6 +81,4 @@ class QueryLog(Base):
         DateTime, default=datetime.utcnow, nullable=False
     )
 
-    __table_args__ = (
-        Index("idx_query_logs_created_at", "created_at"),
-    )
+    __table_args__ = (Index("idx_query_logs_created_at", "created_at"),)

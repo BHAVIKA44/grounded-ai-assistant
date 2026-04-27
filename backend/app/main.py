@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI) -> Any:
         setup_langsmith_tracing()
 
         # Initialize database
-        from app.models.db_connection import init_db
+        from app.db.session import init_db
         await init_db()
 
         # Initialize Redis connection check
@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI) -> Any:
     # Shutdown: Clean up resources
     logger.info("application_shutting_down")
     try:
-        from app.models.db_connection import close_db
+        from app.db.session import close_db
         await close_db()
         logger.info("application_shutdown_complete")
     except Exception as e:
@@ -154,7 +154,7 @@ async def readiness_check() -> Dict[str, str]:
     """
     # Check database
     try:
-        from app.models.db_connection import get_session
+        from app.db.session import get_session
         async with get_session() as session:
             await session.execute("SELECT 1")
     except Exception:

@@ -1,5 +1,6 @@
 """Core module initialization."""
-from app.core.config import get_settings, Settings
+from app.core.config import get_settings
+from app.core.settings import Settings
 from app.core.logging import get_logger, setup_logging
 
 __all__ = [

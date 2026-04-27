@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.db.session import get_session_dependency
 from app.evaluation.rag_evaluator import RAGEvaluator, get_rag_evaluator
-from app.models.db_connection import get_session_dependency
 from app.schemas.document import EvaluationRequest, EvaluationResponse
 
 logger = get_logger(__name__)

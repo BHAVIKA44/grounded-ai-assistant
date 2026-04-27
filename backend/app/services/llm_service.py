@@ -1,6 +1,4 @@
-"""
-LLM service for answer generation with Ollama and OpenAI support.
-"""
+"""LLM service for answer generation with Ollama and OpenAI support."""
 
 import time
 from enum import Enum
@@ -12,7 +10,7 @@ from langchain.schema import HumanMessage, SystemMessage
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.services.prompts import PromptTemplates
+from app.services.prompt_service import PromptTemplates, extract_citations
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -43,20 +41,9 @@ class LLMService:
         context_chunks: List[str],
         system_prompt: Optional[str] = None,
     ) -> tuple[str, float]:
-        """
-        Generate an answer based on question and context.
-        
-        Args:
-            question: User question
-            context_chunks: Retrieved context chunks
-            system_prompt: Optional custom system prompt
-            
-        Returns:
-            Tuple of (generated_answer, generation_time_ms)
-        """
+        """Generate an answer based on question and context."""
         start_time = time.perf_counter()
 
-        # Build prompt
         system = system_prompt or PromptTemplates.SYSTEM_PROMPT
         user_prompt = PromptTemplates.build_prompt(question, context_chunks)
 
@@ -84,15 +71,14 @@ class LLMService:
                 generation_time_ms=generation_time,
                 answer_length=len(answer),
             )
-
             return answer, generation_time
 
-        except Exception as e:
+        except Exception as exc:
             logger.error(
                 "generation_failed",
                 provider=self.provider,
                 model=self.model,
-                error=str(e),
+                error=str(exc),
             )
             raise
 
@@ -109,7 +95,9 @@ class LLMService:
             )
 
             if response.status_code != 200:
-                raise RuntimeError(f"Ollama API error: {response.status_code} - {response.text}")
+                raise RuntimeError(
+                    f"Ollama API error: {response.status_code} - {response.text}"
+                )
 
             result = response.json()
             return result.get("response", "")
@@ -140,30 +128,21 @@ class LLMService:
         context_chunks: List[str],
         sources: List[str],
     ) -> tuple[str, List[str], float]:
-        """
-        Generate answer with citation enforcement.
-        
-        Args:
-            question: User question
-            context_chunks: Retrieved context chunks
-            sources: Source document names
-            
-        Returns:
-            Tuple of (answer, cited_sources, generation_time_ms)
-        """
-        # Add citation instruction to system prompt
-        system = PromptTemplates.SYSTEM_PROMPT + "\n\n" + PromptTemplates.CITATION_INSTRUCTION
+        """Generate answer with citation enforcement."""
+        _ = sources  # Preserve signature while keeping behavior unchanged.
+        system = (
+            PromptTemplates.SYSTEM_PROMPT
+            + "\n\n"
+            + PromptTemplates.CITATION_INSTRUCTION
+        )
 
-        answer, gen_time = await self.generate(question, context_chunks, system_prompt=system)
-
-        # Extract cited sources
-        from app.services.prompts import extract_citations
+        answer, gen_time = await self.generate(
+            question, context_chunks, system_prompt=system
+        )
         cited = extract_citations(answer)
-
         return answer, cited, gen_time
 
 
-# Singleton instance
 llm_service = LLMService(provider=LLMProvider.OLLAMA)
 
 

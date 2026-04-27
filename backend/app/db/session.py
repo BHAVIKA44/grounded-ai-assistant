@@ -1,20 +1,17 @@
-"""
-Database connection and session management.
-"""
+"""Database connection and session management."""
 
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.models.database import Base
+from app.db.base import Base
 
 logger = get_logger(__name__)
 
-# Global engine and session maker
 _engine = None
 _session_maker = None
 
@@ -29,7 +26,7 @@ async def init_db() -> None:
     _engine = create_async_engine(
         settings.database_url,
         echo=settings.debug,
-        poolclass=NullPool,  # Use NullPool for async
+        poolclass=NullPool,
         pool_pre_ping=True,
     )
 
@@ -39,7 +36,6 @@ async def init_db() -> None:
         expire_on_commit=False,
     )
 
-    # Create tables
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -56,16 +52,7 @@ async def close_db() -> None:
 
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Get database session with automatic cleanup.
-    
-    Yields:
-        AsyncSession: Database session
-        
-    Example:
-        async with get_session() as session:
-            result = await session.execute(query)
-    """
+    """Get database session with automatic cleanup."""
     if _session_maker is None:
         await init_db()
 
@@ -81,11 +68,6 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_session_dependency() -> AsyncGenerator[AsyncSession, None]:
-    """
-    FastAPI dependency for database sessions.
-    
-    Yields:
-        AsyncSession: Database session
-    """
+    """FastAPI dependency for database sessions."""
     async with get_session() as session:
         yield session
