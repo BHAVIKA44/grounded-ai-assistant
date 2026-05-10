@@ -166,6 +166,6 @@ async def readiness_check() -> Dict[str, str]:
 # Import and include routers
 from app.api import documents, chat, evaluation
 
-app.include_router(documents.router, prefix="/api/v1")
-app.include_router(chat.router, prefix="/api/v1")
-app.include_router(evaluation.router, prefix="/api/v1")
+app.include_router(documents.router)
+app.include_router(chat.router)
+app.include_router(evaluation.router)

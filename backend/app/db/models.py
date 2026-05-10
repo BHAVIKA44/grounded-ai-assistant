@@ -19,7 +19,7 @@ class Document(Base):
     document_type: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
-    metadata: Mapped[Optional[dict]] = mapped_column(JSON, default=None)
+    metadata_json: Mapped[Optional[dict]] = mapped_column("metadata", JSON, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -50,17 +50,14 @@ class DocumentChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(String(500), nullable=False)
     page: Mapped[Optional[int]] = mapped_column(Integer, default=None)
-    metadata: Mapped[Optional[dict]] = mapped_column(JSON, default=None)
+    metadata_json: Mapped[Optional[dict]] = mapped_column("metadata", JSON, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
 
     document: Mapped["Document"] = relationship("Document", back_populates="chunks")
 
-    __table_args__ = (
-        Index("idx_chunks_document_id", "document_id"),
-        Index("idx_chunks_content_fts", "content", postgresql_using="gin"),
-    )
+    __table_args__ = (Index("idx_chunks_document_id", "document_id"),)
 
 
 class QueryLog(Base):

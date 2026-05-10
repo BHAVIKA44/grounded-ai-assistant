@@ -13,6 +13,14 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [retrievalQuery, setRetrievalQuery] = useState('');
+  const [retrievalResults, setRetrievalResults] = useState([]);
+  const [retrievalLoading, setRetrievalLoading] = useState(false);
+  const [evalQuestion, setEvalQuestion] = useState('');
+  const [evalGroundTruth, setEvalGroundTruth] = useState('');
+  const [evalContexts, setEvalContexts] = useState('');
+  const [evalResult, setEvalResult] = useState(null);
+  const [evalLoading, setEvalLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -65,16 +73,14 @@ function App() {
 
   const uploadFiles = async (files) => {
     setUploading(true);
-    const formData = new FormData();
-    
-    for (let i = 0; i < files.length; i++) {
-      formData.append('files', files[i]);
-    }
-
     try {
-      await axios.post(`${API_BASE}/documents/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append('file', files[i]);
+        await axios.post(`${API_BASE}/documents/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
       await fetchDocuments();
     } catch (error) {
       console.error('Error uploading files:', error);
@@ -93,6 +99,47 @@ function App() {
     }
   };
 
+  const runRetrievalTest = async (e) => {
+    e.preventDefault();
+    if (!retrievalQuery.trim()) return;
+    setRetrievalLoading(true);
+    try {
+      const response = await axios.get(`${API_BASE}/retrieval`, {
+        params: { query: retrievalQuery.trim(), top_k: 10 },
+      });
+      setRetrievalResults(response.data.results || []);
+    } catch (error) {
+      console.error('Error testing retrieval:', error);
+      setRetrievalResults([]);
+    } finally {
+      setRetrievalLoading(false);
+    }
+  };
+
+  const runEvaluation = async (e) => {
+    e.preventDefault();
+    if (!evalQuestion.trim() || !evalGroundTruth.trim() || !evalContexts.trim()) return;
+    const contexts = evalContexts
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    setEvalLoading(true);
+    setEvalResult(null);
+    try {
+      const response = await axios.post(`${API_BASE}/evaluation`, {
+        question: evalQuestion.trim(),
+        ground_truth_answer: evalGroundTruth.trim(),
+        retrieved_contexts: contexts,
+      });
+      setEvalResult(response.data);
+    } catch (error) {
+      console.error('Error running evaluation:', error);
+      setEvalResult(null);
+    } finally {
+      setEvalLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim() || loading) return;
@@ -105,7 +152,7 @@ function App() {
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
 
     try {
-      const response = await axios.post(`${API_BASE}/chat/ask`, {
+      const response = await axios.post(`${API_BASE}/ask`, {
         question: userMessage,
         include_citations: true,
       });
@@ -116,7 +163,18 @@ function App() {
       // Add assistant message
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: answer, citations },
+        {
+          role: 'assistant',
+          content: answer,
+          citations,
+          metrics: {
+            retrieval: response.data.retrieval_time_ms,
+            generation: response.data.generation_time_ms,
+            total: response.data.total_time_ms,
+            cached: response.data.cached,
+            model: response.data.model_used,
+          },
+        },
       ]);
     } catch (error) {
       console.error('Error sending message:', error);
@@ -159,6 +217,12 @@ function App() {
           >
             Documents ({documents.length})
           </button>
+          <button
+            className={`tab ${activeTab === 'ops' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ops')}
+          >
+            RAG Ops
+          </button>
         </div>
 
         {activeTab === 'upload' && (
@@ -200,7 +264,7 @@ function App() {
                 {documents.map((doc) => (
                   <div key={doc.id} className="file-item">
                     <div className="file-info">
-                      <span className="file-name">{doc.filename}</span>
+                      <span className="file-name">{doc.title}</span>
                       <span className="file-size">
                         {formatFileSize(doc.file_size || 0)}
                       </span>
@@ -246,6 +310,24 @@ function App() {
                         ))}
                       </div>
                     )}
+                    {msg.metrics && (
+                      <div className="citations">
+                        <strong>Performance:</strong>
+                        <span className="citation">
+                          retrieval {msg.metrics.retrieval?.toFixed?.(1)} ms
+                        </span>
+                        <span className="citation">
+                          generation {msg.metrics.generation?.toFixed?.(1)} ms
+                        </span>
+                        <span className="citation">
+                          total {msg.metrics.total?.toFixed?.(1)} ms
+                        </span>
+                        <span className="citation">
+                          {msg.metrics.cached ? 'cached' : 'fresh'}
+                        </span>
+                        <span className="citation">{msg.metrics.model}</span>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {loading && (
@@ -283,6 +365,85 @@ function App() {
                 </button>
               </form>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'ops' && (
+          <div className="card">
+            <h2>RAG Operations</h2>
+
+            <form onSubmit={runRetrievalTest} style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>Retrieval Inspector</h3>
+              <input
+                className="input"
+                type="text"
+                value={retrievalQuery}
+                onChange={(e) => setRetrievalQuery(e.target.value)}
+                placeholder="Enter a query to inspect retrieval quality"
+              />
+              <button className="btn" type="submit" disabled={retrievalLoading}>
+                {retrievalLoading ? 'Running...' : 'Run Retrieval'}
+              </button>
+            </form>
+
+            {retrievalResults.length > 0 && (
+              <div className="file-list" style={{ marginBottom: '1.5rem' }}>
+                {retrievalResults.map((item) => (
+                  <div key={`${item.chunk_id}-${item.method}`} className="file-item">
+                    <div className="file-info">
+                      <span className="file-name">{item.source}</span>
+                      <span className="file-size">
+                        score {Number(item.score || 0).toFixed(3)} | {item.method}
+                      </span>
+                      <span style={{ color: '#555', marginTop: 6 }}>{item.content}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={runEvaluation}>
+              <h3 style={{ marginBottom: '0.5rem' }}>RAG Evaluation</h3>
+              <input
+                className="input"
+                type="text"
+                value={evalQuestion}
+                onChange={(e) => setEvalQuestion(e.target.value)}
+                placeholder="Evaluation question"
+              />
+              <textarea
+                className="input"
+                rows={3}
+                value={evalGroundTruth}
+                onChange={(e) => setEvalGroundTruth(e.target.value)}
+                placeholder="Ground truth answer"
+                style={{ marginTop: '0.5rem' }}
+              />
+              <textarea
+                className="input"
+                rows={5}
+                value={evalContexts}
+                onChange={(e) => setEvalContexts(e.target.value)}
+                placeholder="Retrieved contexts (one per line)"
+                style={{ marginTop: '0.5rem' }}
+              />
+              <button className="btn" type="submit" disabled={evalLoading}>
+                {evalLoading ? 'Evaluating...' : 'Run Evaluation'}
+              </button>
+            </form>
+
+            {evalResult && (
+              <div className="file-list" style={{ marginTop: '1rem' }}>
+                {Object.entries(evalResult).map(([metric, value]) => (
+                  <div key={metric} className="file-item">
+                    <div className="file-info">
+                      <span className="file-name">{metric}</span>
+                      <span className="file-size">{Number(value).toFixed(4)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>

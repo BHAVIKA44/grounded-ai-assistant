@@ -7,7 +7,7 @@ import re
 from typing import List, Optional
 
 from pypdf import PdfReader
-from python_docx import Document
+from docx import Document
 
 from app.core.logging import get_logger
 

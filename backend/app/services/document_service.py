@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.models import Document, DocumentChunk
+from app.retrieval.hybrid import hybrid_retrieval
 from app.services.chunker import ChunkingConfig, ChunkingStrategy, DocumentChunker
 from app.services.document_parser import parse_document
 
@@ -39,6 +40,7 @@ class DocumentService:
         content: str,
         document_type: str,
         filename: str,
+        file_bytes: bytes | None = None,
     ) -> Document:
         """
         Create a new document with chunks.
@@ -62,7 +64,7 @@ class DocumentService:
             document_type=document_type,
             content=content,
             chunk_count=0,
-            metadata={"filename": filename},
+            metadata_json={"filename": filename},
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
@@ -72,15 +74,10 @@ class DocumentService:
 
         # Parse and chunk the document
         try:
-            # Determine file extension
-            ext = filename.split(".")[-1] if "." in filename else document_type
-
-            # Parse document (for text content, use directly)
-            if document_type == "text":
-                pages = [(content, None)]
+            ext = filename.split(".")[-1].lower() if "." in filename else document_type
+            if file_bytes is not None:
+                pages = parse_document(file_bytes, filename, ext)
             else:
-                # For file-based parsing, we'd need the actual file bytes
-                # This is a simplified version
                 pages = [(content, None)]
 
             # Create chunks
@@ -94,6 +91,20 @@ class DocumentService:
                 )
                 chunks.extend(page_chunks)
 
+            chunk_texts = [chunk.content for chunk in chunks]
+            chunk_metadatas = [
+                {
+                    "document_id": document_id,
+                    "source": chunk.source,
+                    "page": chunk.page,
+                    "chunk_index": chunk.chunk_index,
+                    "document_title": title,
+                    "document_type": document_type,
+                }
+                for chunk in chunks
+            ]
+            chunk_ids = [chunk.id for chunk in chunks]
+
             # Save chunks to database
             for chunk in chunks:
                 db_chunk = DocumentChunk(
@@ -103,13 +114,19 @@ class DocumentService:
                     content=chunk.content,
                     source=chunk.source,
                     page=chunk.page,
-                    metadata={},
+                    metadata_json={},
                     created_at=datetime.utcnow(),
                 )
                 session.add(db_chunk)
 
             # Update chunk count
             document.chunk_count = len(chunks)
+            if chunk_texts:
+                await hybrid_retrieval.add_documents(
+                    texts=chunk_texts,
+                    metadatas=chunk_metadatas,
+                    ids=chunk_ids,
+                )
 
             logger.info(
                 "document_created",

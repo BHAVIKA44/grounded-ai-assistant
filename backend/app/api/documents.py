@@ -74,7 +74,13 @@ async def upload_document(
         )
 
     # Determine document type
-    doc_type = DocumentType(ext) if ext in ["pdf", "txt", "docx"] else DocumentType.TEXT
+    if ext == "pdf":
+        doc_type = DocumentType.PDF
+    elif ext == "docx":
+        doc_type = DocumentType.DOCX
+    else:
+        # Map .txt extension to schema enum value "text"
+        doc_type = DocumentType.TEXT
 
     # Use filename as title if not provided
     doc_title = title or filename
@@ -98,6 +104,7 @@ async def upload_document(
             content=content_text,
             document_type=doc_type.value,
             filename=filename,
+            file_bytes=content,
         )
 
         await session.commit()
@@ -123,6 +130,21 @@ async def upload_document(
         logger.error("upload_failed", error=str(e), filename=filename)
         await session.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
+
+
+@router.post(
+    "/upload",
+    response_model=DocumentResponse,
+    status_code=201,
+    responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}},
+)
+async def upload_document_alias(
+    file: UploadFile = File(...),
+    title: str = None,
+    session: AsyncSession = Depends(get_session_dependency),
+) -> DocumentResponse:
+    """Alias route for clients using /documents/upload."""
+    return await upload_document(file=file, title=title, session=session)
 
 
 @router.get(
