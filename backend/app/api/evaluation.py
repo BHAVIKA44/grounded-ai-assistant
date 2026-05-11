@@ -5,6 +5,7 @@ Evaluation API routes.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import GenerationError
 from app.core.logging import get_logger
 from app.db.session import get_session_dependency
 from app.evaluation.rag_evaluator import RAGEvaluator, get_rag_evaluator
@@ -61,9 +62,18 @@ async def evaluate_rag(
             overall_score=result.overall_score,
         )
 
+    except GenerationError as e:
+        logger.error("evaluation_generation_failed", error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={"code": e.code, "message": str(e)},
+        )
     except Exception as e:
         logger.error("evaluation_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "evaluation_failed", "message": str(e)},
+        )
 
 
 @router.post("/batch")
@@ -77,23 +87,35 @@ async def evaluate_batch(
     Returns aggregated metrics.
     """
     results = []
+    try:
+        for eval_request in evaluations:
+            answer = (eval_request.answer or "").strip()
+            if not answer:
+                llm_service = await get_llm_service()
+                answer, _ = await llm_service.generate(
+                    question=eval_request.question,
+                    context_chunks=eval_request.retrieved_contexts,
+                )
 
-    for eval_request in evaluations:
-        answer = (eval_request.answer or "").strip()
-        if not answer:
-            llm_service = await get_llm_service()
-            answer, _ = await llm_service.generate(
+            result = await evaluator.evaluate(
                 question=eval_request.question,
-                context_chunks=eval_request.retrieved_contexts,
+                answer=answer,
+                retrieved_contexts=eval_request.retrieved_contexts,
+                ground_truth=eval_request.ground_truth_answer,
             )
-
-        result = await evaluator.evaluate(
-            question=eval_request.question,
-            answer=answer,
-            retrieved_contexts=eval_request.retrieved_contexts,
-            ground_truth=eval_request.ground_truth_answer,
+            results.append(result)
+    except GenerationError as e:
+        logger.error("batch_evaluation_generation_failed", error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={"code": e.code, "message": str(e)},
         )
-        results.append(result)
+    except Exception as e:
+        logger.error("batch_evaluation_failed", error=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "batch_evaluation_failed", "message": str(e)},
+        )
 
     # Calculate averages
     avg_faithfulness = sum(r.faithfulness for r in results) / len(results)

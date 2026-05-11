@@ -9,6 +9,7 @@ from typing import List, Optional
 from pypdf import PdfReader
 from docx import Document
 
+from app.core.exceptions import DocumentParseError
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -46,7 +47,7 @@ class DocumentParser:
 
         except Exception as e:
             logger.error("pdf_parse_error", filename=filename, error=str(e))
-            raise ValueError(f"Failed to parse PDF: {str(e)}")
+            raise DocumentParseError(f"Failed to parse PDF: {str(e)}")
 
     @staticmethod
     def parse_txt(file_bytes: bytes, filename: str) -> List[tuple[str, Optional[int]]]:
@@ -80,7 +81,7 @@ class DocumentParser:
 
         except Exception as e:
             logger.error("txt_parse_error", filename=filename, error=str(e))
-            raise ValueError(f"Failed to parse text file: {str(e)}")
+            raise DocumentParseError(f"Failed to parse text file: {str(e)}")
 
     @staticmethod
     def parse_docx(file_bytes: bytes, filename: str) -> List[tuple[str, Optional[int]]]:
@@ -114,7 +115,7 @@ class DocumentParser:
 
         except Exception as e:
             logger.error("docx_parse_error", filename=filename, error=str(e))
-            raise ValueError(f"Failed to parse DOCX: {str(e)}")
+            raise DocumentParseError(f"Failed to parse DOCX: {str(e)}")
 
     @staticmethod
     def _clean_text(text: str) -> str:
@@ -168,4 +169,4 @@ def parse_document(file_bytes: bytes, filename: str, file_extension: str) -> Lis
     elif extension in ["docx", "doc"]:
         return DocumentParser.parse_docx(file_bytes, filename)
     else:
-        raise ValueError(f"Unsupported file type: {extension}")
+        raise DocumentParseError(f"Unsupported file type: {extension}")

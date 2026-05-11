@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.exceptions import GenerationError, RetrievalError
 from app.core.logging import get_logger
 from app.db.session import get_session_dependency
 from app.retrieval.hybrid import HybridRetrieval, get_hybrid_retrieval
@@ -95,8 +96,11 @@ async def ask_question(
         )
 
     except Exception as e:
-        logger.error("retrieval_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Retrieval failed: {str(e)}")
+        logger.error("chat_retrieval_failed", error=str(e), question=request.question[:100])
+        raise HTTPException(
+            status_code=500,
+            detail={"code": RetrievalError(str(e)).code, "message": f"Retrieval failed: {str(e)}"},
+        )
 
     # Check if we have any context
     if not retrieved_chunks:
@@ -148,9 +152,18 @@ async def ask_question(
 
         generation_time = (time.perf_counter() - generation_start) * 1000
 
+    except GenerationError as e:
+        logger.error("chat_generation_failed", error=str(e), question=request.question[:100])
+        raise HTTPException(
+            status_code=500,
+            detail={"code": e.code, "message": f"Generation failed: {str(e)}"},
+        )
     except Exception as e:
-        logger.error("generation_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+        logger.error("chat_generation_failed", error=str(e), question=request.question[:100])
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "generation_error", "message": f"Generation failed: {str(e)}"},
+        )
 
     # Build citations
     unique_citations = []

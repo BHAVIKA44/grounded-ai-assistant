@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.exceptions import DocumentParseError
 from app.core.logging import get_logger
 from app.db.models import Document, DocumentChunk
 from app.retrieval.hybrid import hybrid_retrieval
@@ -137,6 +138,10 @@ class DocumentService:
 
             return document
 
+        except DocumentParseError:
+            logger.error("document_creation_failed_parse", title=title, filename=filename)
+            await session.rollback()
+            raise
         except Exception as e:
             logger.error("document_creation_failed", error=str(e), title=title)
             await session.rollback()

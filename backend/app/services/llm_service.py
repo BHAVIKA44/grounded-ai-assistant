@@ -9,6 +9,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 
 from app.core.config import get_settings
+from app.core.exceptions import ExternalServiceError, GenerationError
 from app.core.logging import get_logger
 from app.services.prompt_service import PromptTemplates, extract_citations
 
@@ -60,7 +61,7 @@ class LLMService:
             elif self.provider == LLMProvider.OPENAI:
                 answer = await self._generate_openai(system, user_prompt)
             else:
-                raise ValueError(f"Unknown provider: {self.provider}")
+                raise GenerationError(f"Unknown provider: {self.provider}")
 
             generation_time = (time.perf_counter() - start_time) * 1000
 
@@ -80,7 +81,9 @@ class LLMService:
                 model=self.model,
                 error=str(exc),
             )
-            raise
+            if isinstance(exc, (GenerationError, ExternalServiceError)):
+                raise
+            raise GenerationError(str(exc))
 
     async def _generate_ollama(self, system: str, user_prompt: str) -> str:
         """Generate answer using Ollama."""
@@ -95,7 +98,7 @@ class LLMService:
             )
 
             if response.status_code != 200:
-                raise RuntimeError(
+                raise ExternalServiceError(
                     f"Ollama API error: {response.status_code} - {response.text}"
                 )
 
@@ -105,7 +108,7 @@ class LLMService:
     async def _generate_openai(self, system: str, user_prompt: str) -> str:
         """Generate answer using OpenAI."""
         if not settings.openai_api_key:
-            raise ValueError("OpenAI API key not configured")
+            raise ExternalServiceError("OpenAI API key not configured")
 
         llm = ChatOpenAI(
             model=settings.openai_model,

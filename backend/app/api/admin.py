@@ -5,12 +5,15 @@ from sqlalchemy import text
 import httpx
 
 from app.core.config import get_settings
+from app.core.exceptions import ExternalServiceError, ValidationAppError
+from app.core.logging import get_logger
 from app.db.session import get_session
 from app.fine_tuning.trainer import get_fine_tuning_service
 from app.services.cache_service import get_cache_service
 from app.services.llm_service import LLMProvider, get_llm_service
 from app.services.observability import get_observability_service
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 _fine_tune_state: Dict[str, Any] = {"status": "idle", "dataset_path": None, "output_path": None, "error": None}
 SUPPORTED_OLLAMA_MODELS = ["llama3.2", "phi3:mini", "qwen2.5:3b"]
@@ -73,13 +76,19 @@ async def set_llm(provider: str = "ollama", model: str = "") -> Dict[str, Any]:
     svc = await get_llm_service()
     try:
         svc.provider = LLMProvider(provider)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "validation_error", "message": str(exc)},
+        )
     if model:
         if svc.provider == LLMProvider.OLLAMA and model not in SUPPORTED_OLLAMA_MODELS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_OLLAMA_MODELS)}",
+                detail={
+                    "code": "validation_error",
+                    "message": f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_OLLAMA_MODELS)}",
+                },
             )
         svc.model = model
     return {
@@ -94,7 +103,10 @@ async def pull_llm_model(model: str) -> Dict[str, Any]:
     if model not in SUPPORTED_OLLAMA_MODELS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_OLLAMA_MODELS)}",
+            detail={
+                "code": "validation_error",
+                "message": f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_OLLAMA_MODELS)}",
+            },
         )
     settings = get_settings()
     try:
@@ -104,10 +116,20 @@ async def pull_llm_model(model: str) -> Dict[str, Any]:
                 json={"name": model, "stream": False},
             )
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail=response.text)
+            raise ExternalServiceError(f"Ollama pull failed: {response.text}")
         return {"pulled": True, "model": model}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    except ExternalServiceError as exc:
+        logger.error("admin_llm_pull_failed", model=model, error=str(exc))
+        raise HTTPException(
+            status_code=502,
+            detail={"code": exc.code, "message": str(exc)},
+        )
+    except httpx.HTTPError as exc:
+        logger.error("admin_llm_pull_failed", model=model, error=str(exc))
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "external_service_error", "message": str(exc)},
+        )
 
 
 @router.post("/fine-tuning/prepare")
@@ -124,7 +146,10 @@ async def run_fine_tuning(dataset_path: str | None = None) -> Dict[str, Any]:
     svc = await get_fine_tuning_service()
     active_dataset = dataset_path or _fine_tune_state.get("dataset_path")
     if not active_dataset:
-        raise HTTPException(status_code=400, detail="No dataset prepared")
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "validation_error", "message": "No dataset prepared"},
+        )
     _fine_tune_state["status"] = "running"
     _fine_tune_state["error"] = None
     try:
@@ -138,7 +163,10 @@ async def run_fine_tuning(dataset_path: str | None = None) -> Dict[str, Any]:
         svc_logger = getattr(svc, "logger", None)
         if svc_logger is not None:
             svc_logger.exception("fine_tuning_run_failed", dataset_path=active_dataset)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "fine_tuning_failed", "message": str(exc)},
+        )
 
 
 @router.get("/fine-tuning/status")

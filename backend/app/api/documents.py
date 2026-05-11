@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.exceptions import DocumentParseError
 from app.core.logging import get_logger
 from app.db.session import get_session_dependency
 from app.schemas.document import (
@@ -93,9 +94,7 @@ async def upload_document(
             except UnicodeDecodeError:
                 content_text = content.decode("latin-1")
         else:
-            # For PDF/DOCX, we'll store the content as-is for now
-            # In production, you'd store in object storage
-            content_text = f"[{doc_type.value.upper()}] {filename}"
+            content_text = filename
 
         # Create document
         document = await document_service.create_document(
@@ -126,10 +125,20 @@ async def upload_document(
             updated_at=document.updated_at,
         )
 
+    except DocumentParseError as e:
+        logger.error("upload_failed_parse", error=str(e), filename=filename)
+        await session.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail={"code": e.code, "message": str(e)},
+        )
     except Exception as e:
         logger.error("upload_failed", error=str(e), filename=filename)
         await session.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "document_upload_failed", "message": f"Failed to process document: {str(e)}"},
+        )
 
 
 @router.post(
@@ -195,7 +204,10 @@ async def list_documents(
 
     except Exception as e:
         logger.error("list_documents_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "document_list_failed", "message": str(e)},
+        )
 
 
 @router.get(
