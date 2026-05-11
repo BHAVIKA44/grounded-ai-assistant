@@ -24,7 +24,13 @@ function App() {
   const [adminStatus, setAdminStatus] = useState(null);
   const [adminModel, setAdminModel] = useState('llama3.2');
   const [adminProvider, setAdminProvider] = useState('ollama');
+  const [supportedProviders, setSupportedProviders] = useState(['ollama', 'groq', 'openai']);
   const [supportedModels, setSupportedModels] = useState(['llama3.2', 'phi3:mini', 'qwen2.5:3b']);
+  const [supportedModelsByProvider, setSupportedModelsByProvider] = useState({
+    ollama: ['llama3.2', 'phi3:mini', 'qwen2.5:3b'],
+    groq: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768'],
+    openai: [],
+  });
   const [askTopK, setAskTopK] = useState(10);
   const [askUseRerank, setAskUseRerank] = useState(true);
   const [askUseCache, setAskUseCache] = useState(true);
@@ -73,8 +79,20 @@ function App() {
         setAdminModel(response.data.llm.model);
       }
       const llmRes = await axios.get(`${API_BASE}/admin/llm`);
+      if (llmRes.data?.provider) {
+        setAdminProvider(llmRes.data.provider);
+      }
+      if (Array.isArray(llmRes.data?.supported_providers)) {
+        setSupportedProviders(llmRes.data.supported_providers);
+      }
       if (Array.isArray(llmRes.data?.supported_models)) {
         setSupportedModels(llmRes.data.supported_models);
+      }
+      if (llmRes.data?.supported_models_by_provider) {
+        setSupportedModelsByProvider(llmRes.data.supported_models_by_provider);
+      }
+      if (llmRes.data?.model) {
+        setAdminModel(llmRes.data.model);
       }
       setAdminMessage({ type: 'success', text: 'Status refreshed.' });
     } catch (error) {
@@ -84,6 +102,18 @@ function App() {
       setAdminLoading((s) => ({ ...s, status: false }));
     }
   };
+  useEffect(() => {
+    const nextModels = supportedModelsByProvider[adminProvider] || [];
+    if (nextModels.length > 0) {
+      setSupportedModels(nextModels);
+      if (!nextModels.includes(adminModel)) {
+        setAdminModel(nextModels[0]);
+      }
+    } else {
+      setSupportedModels([]);
+    }
+  }, [adminProvider, supportedModelsByProvider]);
+
   const clearCache = async () => {
     setAdminLoading((s) => ({ ...s, cache: true }));
     try {
@@ -628,12 +658,20 @@ function App() {
             </div>
             <div className="ops-section">
               <h3>LLM Configuration</h3>
-              <input className="input" value={adminProvider} onChange={(e) => setAdminProvider(e.target.value)} placeholder="provider (ollama/openai)" />
-              <select className="input" value={adminModel} onChange={(e) => setAdminModel(e.target.value)}>
-                {supportedModels.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+              <select className="input" value={adminProvider} onChange={(e) => setAdminProvider(e.target.value)}>
+                {supportedProviders.map((p) => (
+                  <option key={p} value={p}>{p}</option>
                 ))}
               </select>
+              {supportedModels.length > 0 ? (
+                <select className="input" value={adminModel} onChange={(e) => setAdminModel(e.target.value)}>
+                  {supportedModels.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              ) : (
+                <input className="input" value={adminModel} onChange={(e) => setAdminModel(e.target.value)} placeholder="model name" />
+              )}
               <div className="chat-input-container">
                 <button className="btn btn-primary" onClick={updateModel} disabled={adminLoading.model}>
                   {adminLoading.model ? 'Updating...' : 'Update Model'}

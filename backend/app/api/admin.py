@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 _fine_tune_state: Dict[str, Any] = {"status": "idle", "dataset_path": None, "output_path": None, "error": None}
 SUPPORTED_OLLAMA_MODELS = ["llama3.2", "phi3:mini", "qwen2.5:3b"]
+SUPPORTED_GROQ_MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"]
 
 
 @router.get("/status")
@@ -44,6 +45,7 @@ async def status() -> Dict[str, Any]:
             "provider": "ollama",
             "model": settings.ollama_model,
             "openai_model": settings.openai_model,
+            "groq_model": settings.groq_model,
         },
     }
 
@@ -67,7 +69,13 @@ async def llm_status() -> Dict[str, Any]:
     return {
         "provider": svc.provider,
         "model": svc.model,
+        "supported_providers": [p.value for p in LLMProvider],
         "supported_models": SUPPORTED_OLLAMA_MODELS,
+        "supported_models_by_provider": {
+            "ollama": SUPPORTED_OLLAMA_MODELS,
+            "groq": SUPPORTED_GROQ_MODELS,
+            "openai": [],
+        },
     }
 
 
@@ -88,6 +96,14 @@ async def set_llm(provider: str = "ollama", model: str = "") -> Dict[str, Any]:
                 detail={
                     "code": "validation_error",
                     "message": f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_OLLAMA_MODELS)}",
+                },
+            )
+        if svc.provider == LLMProvider.GROQ and model not in SUPPORTED_GROQ_MODELS:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "validation_error",
+                    "message": f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_GROQ_MODELS)}",
                 },
             )
         svc.model = model

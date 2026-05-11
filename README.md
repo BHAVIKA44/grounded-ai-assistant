@@ -1,160 +1,141 @@
 # Grounded AI Assistant
 
-A production-grade Retrieval-Augmented Generation (RAG) system with hybrid retrieval, cross-encoder reranking, and local inference support.
+Grounded AI Assistant is a FastAPI + React Retrieval-Augmented Generation (RAG) system designed for practical, interview-ready backend architecture. It supports document ingestion, hybrid retrieval, grounded answer generation with citations, evaluation workflows, and operational controls through an admin UI.
 
-## Features
+## Key Capabilities
 
-- **Hybrid Retrieval**: BM25 + Vector search combined
-- **Cross-Encoder Reranking**: Optimized result ranking
-- **Local Inference**: Ollama integration for private LLM
-- **Observability**: LangSmith tracing support
-- **Fine-tuning**: LoRA/QLoRA support for custom models
-- **Caching**: Redis-powered response caching
-- **Production-Ready**: Dockerized with monitoring
-
-## Tech Stack
-
-- **Backend**: FastAPI, Python 3.11+
-- **LLM Framework**: LangChain, LangGraph
-- **Vector Store**: ChromaDB
-- **Keyword Search**: rank_bm25
-- **Embeddings**: SentenceTransformers
-- **Cache**: Redis
-- **Database**: PostgreSQL with SQLAlchemy async
-- **Observability**: LangSmith
-- **LLM Runtime**: Ollama
-- **Fine-Tuning**: PEFT (LoRA/QLoRA)
-- **Frontend**: React 18
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- Docker & Docker Compose
-- Node.js 18+
-- PostgreSQL 15+
-- Redis 7+
-
-### Docker Compose (Recommended)
-
-```bash
-cd infra
-docker-compose up -d
-```
-
-Services will be available at:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- PostgreSQL: localhost:5432
-- Redis: localhost:6379
-- Ollama: http://localhost:11434
-
-### Manual Setup
-
-1. Clone the repository:
-```bash
-cd grounded-ai-assistant
-```
-
-2. Copy environment file:
-```bash
-cp .env.example .env
-```
-
-3. Start infrastructure:
-```bash
-cd infra
-docker-compose up -d postgres redis ollama
-```
-
-4. Install Python dependencies:
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-5. Run the backend:
-```bash
-uvicorn app.main:app --reload
-```
-
-6. Install frontend dependencies:
-```bash
-cd frontend
-npm install
-```
-
-7. Run the frontend:
-```bash
-npm start
-```
-```
+- Document ingestion for `PDF`, `DOCX`, and `TXT`
+- Parsing, chunking, and indexing pipeline
+- Hybrid retrieval (`BM25` + vector search) with optional reranking
+- Grounded chat answers with source attribution
+- Out-of-context fallback behavior
+- Redis response caching
+- RAG quality evaluation (single + batch)
+- Admin operations for model selection, cache control, system status, and fine-tuning controls
+- Multi-provider LLM support:
+  - Local: `ollama`
+  - Hosted: `groq` (free tier friendly), `openai`
 
 ## Architecture
 
-```
-backend/
-├── app/
-│   ├── api/          # FastAPI routes
-│   ├── core/         # Config, logging
-│   ├── services/     # Business logic
-│   ├── retrieval/    # RAG (BM25 + vector + rerank)
-│   ├── models/       # LLM + embeddings
-│   ├── evaluation/   # RAG evaluation
-│   └── schemas/      # Pydantic models
-├── tests/
-└── requirements.txt
-
-frontend/
-├── src/
-└── public/
-
-infra/
-└── docker-compose.yml
+```text
+backend/app/
+├── api/           # HTTP route layer
+├── core/          # config, settings, logging, typed exceptions
+├── db/            # SQLAlchemy base/models/session
+├── services/      # ingestion, llm, cache, parsing, chunking
+├── retrieval/     # bm25, hybrid, reranker
+├── evaluation/    # rag evaluator
+├── fine_tuning/   # trainer workflow
+├── schemas/       # request/response contracts
+├── utils/         # retry, security, text helpers
+└── main.py        # FastAPI app entrypoint
 ```
 
-## API Endpoints
+## Local Run (Docker, Recommended)
 
-### Documents
+1. Start services:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/documents/upload` | Upload documents |
-| GET | `/api/v1/documents` | List all documents |
-| GET | `/api/v1/documents/{id}` | Get document by ID |
-| DELETE | `/api/v1/documents/{id}` | Delete document |
-
-### Chat
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/chat/ask` | Ask a question |
-
-### Evaluation
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/evaluation/evaluate` | Evaluate RAG response |
-
-### Health
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/ready` | Readiness check |
-
-## Environment Variables
-
-See `.env.example` for all configuration options.
-
-## Development
-
-Run tests:
 ```bash
-cd backend
-pytest tests/ -v --cov
+docker compose -f infra/docker-compose.yml up -d --build
 ```
+
+2. Open:
+- Frontend: `http://localhost:3000`
+- Backend: `http://localhost:8000`
+- API docs: `http://localhost:8000/docs`
+
+3. Verify health:
+
+```bash
+curl http://localhost:8000/health
+```
+
+## LLM Provider Setup
+
+### Local mode (Ollama)
+
+- Keep `OLLAMA_BASE_URL=http://ollama:11434` in Docker environment.
+- In Admin tab:
+  - Provider: `ollama`
+  - Model: one of supported ollama models
+
+### Hosted mode (Groq / OpenAI)
+
+- Set environment variables in backend deployment:
+  - Groq:
+    - `GROQ_API_KEY`
+    - `GROQ_MODEL` (default: `llama-3.1-8b-instant`)
+    - `GROQ_BASE_URL` (default set in app)
+  - OpenAI:
+    - `OPENAI_API_KEY`
+    - `OPENAI_MODEL`
+    - `OPENAI_BASE_URL` (default set in app)
+- In Admin tab:
+  - Provider: `groq` or `openai`
+  - Select/enter model and update
+
+## API Surface (Core)
+
+- `POST /api/v1/documents` and `POST /api/v1/documents/upload`
+- `GET /api/v1/documents`
+- `DELETE /api/v1/documents/{document_id}`
+- `POST /api/v1/ask`
+- `GET /api/v1/retrieval`
+- `POST /api/v1/evaluation`
+- `POST /api/v1/evaluation/batch`
+- `GET /api/v1/admin/status`
+- `GET /api/v1/admin/llm`
+- `POST /api/v1/admin/llm`
+- `POST /api/v1/admin/llm/pull`
+- `DELETE /api/v1/admin/cache`
+- `POST /api/v1/admin/fine-tuning/prepare`
+- `POST /api/v1/admin/fine-tuning/run`
+- `GET /api/v1/admin/fine-tuning/status`
+
+## Deployment (Free-Tier Friendly)
+
+Recommended split:
+- Frontend: Vercel
+- Backend: Render Web Service
+- Postgres: Supabase or Render Postgres
+- Redis: Upstash
+- LLM: Groq API
+
+Use Ollama for local development only; avoid self-hosted Ollama in free cloud hosting.
+
+## Engineering Notes
+
+- Structured logging is enabled across request lifecycle and service boundaries.
+- Error responses are standardized with `code` + `message` in key APIs.
+- Citation handling is normalized to known source names from retrieved contexts.
+- Fine-tuning endpoint behavior depends on runtime:
+  - GPU runtime: training path is initialized for LoRA workflow.
+  - CPU-only runtime: API completes with a safe fallback artifact at `./models/lora/fine_tune_summary.json` to avoid hard failures.
+
+## Roadmap / TODO
+
+### High-priority
+
+- Implement full fine-tuning execution pipeline in production mode (dataset tokenization, Trainer loop, checkpointing, adapter export) and validate end-to-end on GPU runtime
+- Add integration tests for:
+  - upload → index → ask
+  - retrieval quality checks
+  - provider switching (`ollama`/`groq`/`openai`)
+- Add migration-driven DB lifecycle (strict Alembic versioning in CI)
+
+### Platform hardening
+
+- Add request correlation IDs across frontend ↔ backend logs
+- Add `/metrics` endpoint with latency, cache hit-rate, and retrieval quality stats
+- Add circuit-breaker + retry policy for external LLM provider calls
+- Improve startup warmup to reduce first-query latency for embedding/reranker models
+
+### Product quality
+
+- Add per-document filtering in chat queries
+- Add document-level indexing progress in UI
+- Add exportable evaluation reports from RAG Ops
 
 ## License
 

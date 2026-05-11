@@ -22,6 +22,7 @@ class LLMProvider(str, Enum):
 
     OLLAMA = "ollama"
     OPENAI = "openai"
+    GROQ = "groq"
 
 
 class LLMService:
@@ -60,6 +61,8 @@ class LLMService:
                 answer = await self._generate_ollama(system, user_prompt)
             elif self.provider == LLMProvider.OPENAI:
                 answer = await self._generate_openai(system, user_prompt)
+            elif self.provider == LLMProvider.GROQ:
+                answer = await self._generate_groq(system, user_prompt)
             else:
                 raise GenerationError(f"Unknown provider: {self.provider}")
 
@@ -113,6 +116,28 @@ class LLMService:
         llm = ChatOpenAI(
             model=settings.openai_model,
             api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+            temperature=0,
+            max_tokens=1000,
+        )
+
+        messages = [
+            SystemMessage(content=system),
+            HumanMessage(content=user_prompt),
+        ]
+
+        response = await llm.agenerate([messages])
+        return response.generations[0][0].text
+
+    async def _generate_groq(self, system: str, user_prompt: str) -> str:
+        """Generate answer using Groq OpenAI-compatible API."""
+        if not settings.groq_api_key:
+            raise ExternalServiceError("Groq API key not configured")
+
+        llm = ChatOpenAI(
+            model=settings.groq_model,
+            api_key=settings.groq_api_key,
+            base_url=settings.groq_base_url,
             temperature=0,
             max_tokens=1000,
         )
