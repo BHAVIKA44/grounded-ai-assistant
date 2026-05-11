@@ -93,17 +93,6 @@ curl http://localhost:8000/health
 - `POST /api/v1/admin/fine-tuning/run`
 - `GET /api/v1/admin/fine-tuning/status`
 
-## Deployment (Free-Tier Friendly)
-
-Recommended split:
-- Frontend: Vercel
-- Backend: Render Web Service
-- Postgres: Supabase or Render Postgres
-- Redis: Upstash
-- LLM: Groq API
-
-Use Ollama for local development only; avoid self-hosted Ollama in free cloud hosting.
-
 ## Engineering Notes
 
 - Structured logging is enabled across request lifecycle and service boundaries.
