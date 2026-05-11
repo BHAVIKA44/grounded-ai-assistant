@@ -1,6 +1,6 @@
 # Grounded AI Assistant
 
-Grounded AI Assistant is a FastAPI + React Retrieval-Augmented Generation (RAG) system designed for practical, interview-ready backend architecture. It supports document ingestion, hybrid retrieval, grounded answer generation with citations, evaluation workflows, and operational controls through an admin UI.
+Grounded AI Assistant is a FastAPI + React Retrieval-Augmented Generation (RAG) system designed. It supports document ingestion, hybrid retrieval, grounded answer generation with citations, evaluation workflows, and operational controls through an admin UI.
 
 ## Key Capabilities
 
