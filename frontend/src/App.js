@@ -24,12 +24,11 @@ function App() {
   const [adminStatus, setAdminStatus] = useState(null);
   const [adminModel, setAdminModel] = useState('llama3.2');
   const [adminProvider, setAdminProvider] = useState('ollama');
-  const [supportedProviders, setSupportedProviders] = useState(['ollama', 'groq', 'openai']);
+  const [supportedProviders, setSupportedProviders] = useState(['ollama', 'groq']);
   const [supportedModels, setSupportedModels] = useState(['llama3.2', 'phi3:mini', 'qwen2.5:3b']);
   const [supportedModelsByProvider, setSupportedModelsByProvider] = useState({
     ollama: ['llama3.2', 'phi3:mini', 'qwen2.5:3b'],
     groq: ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768'],
-    openai: [],
   });
   const [askTopK, setAskTopK] = useState(10);
   const [askUseRerank, setAskUseRerank] = useState(true);
@@ -130,13 +129,25 @@ function App() {
   const updateModel = async () => {
     setAdminLoading((s) => ({ ...s, model: true }));
     try {
-      await axios.post(`${API_BASE}/admin/llm/pull`, null, { params: { model: adminModel } });
+      if (adminProvider === 'ollama') {
+        await axios.post(`${API_BASE}/admin/llm/pull`, null, { params: { model: adminModel } });
+      }
       await axios.post(`${API_BASE}/admin/llm`, null, { params: { provider: adminProvider, model: adminModel } });
       await fetchAdminStatus();
-      setAdminMessage({ type: 'success', text: 'Model pulled and updated successfully.' });
+      setAdminMessage({
+        type: 'success',
+        text: adminProvider === 'ollama'
+          ? 'Model pulled and updated successfully.'
+          : 'Provider/model updated successfully.',
+      });
     } catch (error) {
       console.error('Error updating model:', error);
-      setAdminMessage({ type: 'error', text: 'Failed to pull/update model.' });
+      setAdminMessage({
+        type: 'error',
+        text: adminProvider === 'ollama'
+          ? 'Failed to pull/update model.'
+          : 'Failed to update provider/model.',
+      });
     } finally {
       setAdminLoading((s) => ({ ...s, model: false }));
     }

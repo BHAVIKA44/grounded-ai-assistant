@@ -3,11 +3,9 @@ Evaluation API routes.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import GenerationError
 from app.core.logging import get_logger
-from app.db.session import get_session_dependency
 from app.evaluation.rag_evaluator import RAGEvaluator, get_rag_evaluator
 from app.schemas.document import EvaluationRequest, EvaluationResponse
 from app.services.llm_service import get_llm_service

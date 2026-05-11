@@ -3,10 +3,8 @@ Chat API routes for question answering with RAG.
 """
 
 import time
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.exceptions import GenerationError, RetrievalError
@@ -16,7 +14,7 @@ from app.retrieval.hybrid import HybridRetrieval, get_hybrid_retrieval
 from app.retrieval.reranker import Reranker, get_reranker
 from app.schemas.document import AnswerRequest, AnswerResponse, Citation
 from app.services.cache_service import cache_key_question, get_cache_service
-from app.services.llm_service import LLMProvider, get_llm_service
+from app.services.llm_service import get_llm_service
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -28,7 +26,7 @@ OUT_OF_CONTEXT_MESSAGE = "I can't answer this from the uploaded documents."
 @router.post("/ask", response_model=AnswerResponse)
 async def ask_question(
     request: AnswerRequest,
-    session: AsyncSession = Depends(get_session_dependency),
+    _session=Depends(get_session_dependency),
     hybrid_retrieval: HybridRetrieval = Depends(get_hybrid_retrieval),
     reranker: Reranker = Depends(get_reranker),
 ) -> AnswerResponse:
@@ -223,7 +221,7 @@ async def ask_question(
 async def test_retrieval(
     query: str,
     top_k: int = 10,
-    session: AsyncSession = Depends(get_session_dependency),
+    _session=Depends(get_session_dependency),
     hybrid_retrieval: HybridRetrieval = Depends(get_hybrid_retrieval),
 ):
     """

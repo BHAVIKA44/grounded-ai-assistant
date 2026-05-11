@@ -2,11 +2,7 @@
 Document API routes for upload, list, and delete operations.
 """
 
-import io
-from typing import List
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -14,7 +10,6 @@ from app.core.exceptions import DocumentParseError
 from app.core.logging import get_logger
 from app.db.session import get_session_dependency
 from app.schemas.document import (
-    DocumentCreate,
     DocumentListResponse,
     DocumentResponse,
     DocumentType,

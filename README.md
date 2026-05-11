@@ -1,6 +1,6 @@
 # Grounded AI Assistant
 
-Grounded AI Assistant is a FastAPI + React Retrieval-Augmented Generation (RAG) system designed for practical, interview-ready backend architecture. It supports document ingestion, hybrid retrieval, grounded answer generation with citations, evaluation workflows, and operational controls through an admin UI.
+Grounded AI Assistant is a FastAPI + React Retrieval-Augmented Generation (RAG) system designed. It supports document ingestion, hybrid retrieval, grounded answer generation with citations, evaluation workflows, and operational controls through an admin UI.
 
 ## Key Capabilities
 
@@ -92,17 +92,6 @@ curl http://localhost:8000/health
 - `POST /api/v1/admin/fine-tuning/prepare`
 - `POST /api/v1/admin/fine-tuning/run`
 - `GET /api/v1/admin/fine-tuning/status`
-
-## Deployment (Free-Tier Friendly)
-
-Recommended split:
-- Frontend: Vercel
-- Backend: Render Web Service
-- Postgres: Supabase or Render Postgres
-- Redis: Upstash
-- LLM: Groq API
-
-Use Ollama for local development only; avoid self-hosted Ollama in free cloud hosting.
 
 ## Engineering Notes
 

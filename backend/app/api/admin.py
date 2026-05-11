@@ -5,7 +5,7 @@ from sqlalchemy import text
 import httpx
 
 from app.core.config import get_settings
-from app.core.exceptions import ExternalServiceError, ValidationAppError
+from app.core.exceptions import ExternalServiceError
 from app.core.logging import get_logger
 from app.db.session import get_session
 from app.fine_tuning.trainer import get_fine_tuning_service
@@ -69,12 +69,11 @@ async def llm_status() -> Dict[str, Any]:
     return {
         "provider": svc.provider,
         "model": svc.model,
-        "supported_providers": [p.value for p in LLMProvider],
+        "supported_providers": ["ollama", "groq"],
         "supported_models": SUPPORTED_OLLAMA_MODELS,
         "supported_models_by_provider": {
             "ollama": SUPPORTED_OLLAMA_MODELS,
             "groq": SUPPORTED_GROQ_MODELS,
-            "openai": [],
         },
     }
 
