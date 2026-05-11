@@ -146,6 +146,7 @@ class EvaluationRequest(BaseModel):
     question: str
     ground_truth_answer: str
     retrieved_contexts: List[str]
+    answer: Optional[str] = None
 
 
 class EvaluationResponse(BaseModel):

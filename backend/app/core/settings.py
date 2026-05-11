@@ -84,7 +84,7 @@ class Settings(BaseSettings):
 
     # Fine-tuning
     fine_tune_model_base: str = Field(
-        default="meta-llama/Llama-2-7b-hf", alias="FINE_TUNE_MODEL_BASE"
+        default="TinyLlama/TinyLlama-1.1B-Chat-v1.0", alias="FINE_TUNE_MODEL_BASE"
     )
     fine_tune_output_dir: str = Field(
         default="./models/lora", alias="FINE_TUNE_OUTPUT_DIR"

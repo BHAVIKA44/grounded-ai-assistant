@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 settings = get_settings()
 
 router = APIRouter(prefix="/api/v1", tags=["chat"])
+OUT_OF_CONTEXT_MESSAGE = "I can't answer this from the uploaded documents."
 
 
 @router.post("/ask", response_model=AnswerResponse)
@@ -61,7 +62,8 @@ async def ask_question(
         cached = await cache_service.get(cache_key)
         if cached:
             logger.info("cache_hit", question=request.question[:50])
-            return AnswerResponse(**cached, cached=True)
+            cached["cached"] = True
+            return AnswerResponse(**cached)
 
     # Retrieval phase
     retrieval_start = time.perf_counter()
@@ -100,7 +102,21 @@ async def ask_question(
     if not retrieved_chunks:
         logger.warning("no_context_found", question=request.question)
         return AnswerResponse(
-            answer="I don't have enough context to answer this question. Please upload relevant documents first.",
+            answer=OUT_OF_CONTEXT_MESSAGE,
+            question=request.question,
+            citations=[],
+            sources=[],
+            retrieval_time_ms=retrieval_time,
+            generation_time_ms=0,
+            total_time_ms=(time.perf_counter() - total_start) * 1000,
+            model_used="none",
+            cached=False,
+        )
+    top_score = retrieved_chunks[0].score if retrieved_chunks else 0.0
+    if top_score < 0.08:
+        logger.warning("low_retrieval_confidence", question=request.question, score=top_score)
+        return AnswerResponse(
+            answer=OUT_OF_CONTEXT_MESSAGE,
             question=request.question,
             citations=[],
             sources=[],
@@ -116,8 +132,11 @@ async def ask_question(
 
     try:
         # Prepare context
-        context_chunks = [chunk.content for chunk in retrieved_chunks]
-        sources = list(set(chunk.source for chunk in retrieved_chunks))
+        retrieved_chunks = retrieved_chunks[: min(4, len(retrieved_chunks))]
+        context_chunks = [
+            f"[Source: {chunk.source}]\n{chunk.content}" for chunk in retrieved_chunks
+        ]
+        sources = list(dict.fromkeys(chunk.source for chunk in retrieved_chunks))
 
         # Generate answer
         llm_service = await get_llm_service()
@@ -134,16 +153,24 @@ async def ask_question(
         raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
 
     # Build citations
-    citations = [
-        Citation(
-            chunk_id=chunk.chunk_id,
-            content=chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
-            source=chunk.source,
-            score=chunk.score,
-            page=chunk.page,
+    unique_citations = []
+    seen_sources = set()
+    for chunk in retrieved_chunks:
+        if chunk.source in seen_sources:
+            continue
+        seen_sources.add(chunk.source)
+        unique_citations.append(
+            Citation(
+                chunk_id=chunk.chunk_id,
+                content=chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
+                source=chunk.source,
+                score=chunk.score,
+                page=chunk.page,
+            )
         )
-        for chunk in retrieved_chunks[:5]  # Top 5 citations
-    ]
+        if len(unique_citations) >= 5:
+            break
+    citations = unique_citations
 
     # Calculate total time
     total_time = (time.perf_counter() - total_start) * 1000

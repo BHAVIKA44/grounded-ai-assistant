@@ -21,6 +21,27 @@ function App() {
   const [evalContexts, setEvalContexts] = useState('');
   const [evalResult, setEvalResult] = useState(null);
   const [evalLoading, setEvalLoading] = useState(false);
+  const [adminStatus, setAdminStatus] = useState(null);
+  const [adminModel, setAdminModel] = useState('llama3.2');
+  const [adminProvider, setAdminProvider] = useState('ollama');
+  const [supportedModels, setSupportedModels] = useState(['llama3.2', 'phi3:mini', 'qwen2.5:3b']);
+  const [askTopK, setAskTopK] = useState(10);
+  const [askUseRerank, setAskUseRerank] = useState(true);
+  const [askUseCache, setAskUseCache] = useState(true);
+  const [batchEvalInput, setBatchEvalInput] = useState('');
+  const [batchEvalResult, setBatchEvalResult] = useState(null);
+  const [batchEvalLoading, setBatchEvalLoading] = useState(false);
+  const [ftJsonInput, setFtJsonInput] = useState('[{"question":"","context":"","answer":""}]');
+  const [ftStatus, setFtStatus] = useState(null);
+  const [adminLoading, setAdminLoading] = useState({
+    status: false,
+    model: false,
+    cache: false,
+    ftPrepare: false,
+    ftRun: false,
+    ftRefresh: false,
+  });
+  const [adminMessage, setAdminMessage] = useState({ type: '', text: '' });
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -32,6 +53,7 @@ function App() {
   // Load documents on mount
   useEffect(() => {
     fetchDocuments();
+    fetchAdminStatus();
   }, []);
 
   const fetchDocuments = async () => {
@@ -40,6 +62,109 @@ function App() {
       setDocuments(response.data.documents || []);
     } catch (error) {
       console.error('Error fetching documents:', error);
+    }
+  };
+  const fetchAdminStatus = async () => {
+    setAdminLoading((s) => ({ ...s, status: true }));
+    try {
+      const response = await axios.get(`${API_BASE}/admin/status`);
+      setAdminStatus(response.data);
+      if (response.data?.llm?.model) {
+        setAdminModel(response.data.llm.model);
+      }
+      const llmRes = await axios.get(`${API_BASE}/admin/llm`);
+      if (Array.isArray(llmRes.data?.supported_models)) {
+        setSupportedModels(llmRes.data.supported_models);
+      }
+      setAdminMessage({ type: 'success', text: 'Status refreshed.' });
+    } catch (error) {
+      console.error('Error fetching admin status:', error);
+      setAdminMessage({ type: 'error', text: 'Failed to refresh status.' });
+    } finally {
+      setAdminLoading((s) => ({ ...s, status: false }));
+    }
+  };
+  const clearCache = async () => {
+    setAdminLoading((s) => ({ ...s, cache: true }));
+    try {
+      await axios.delete(`${API_BASE}/admin/cache`, { params: { pattern: 'rag:*' } });
+      await fetchAdminStatus();
+      setAdminMessage({ type: 'success', text: 'Cache cleared successfully.' });
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      setAdminMessage({ type: 'error', text: 'Failed to clear cache.' });
+    } finally {
+      setAdminLoading((s) => ({ ...s, cache: false }));
+    }
+  };
+  const updateModel = async () => {
+    setAdminLoading((s) => ({ ...s, model: true }));
+    try {
+      await axios.post(`${API_BASE}/admin/llm/pull`, null, { params: { model: adminModel } });
+      await axios.post(`${API_BASE}/admin/llm`, null, { params: { provider: adminProvider, model: adminModel } });
+      await fetchAdminStatus();
+      setAdminMessage({ type: 'success', text: 'Model pulled and updated successfully.' });
+    } catch (error) {
+      console.error('Error updating model:', error);
+      setAdminMessage({ type: 'error', text: 'Failed to pull/update model.' });
+    } finally {
+      setAdminLoading((s) => ({ ...s, model: false }));
+    }
+  };
+  const runBatchEvaluation = async () => {
+    setBatchEvalLoading(true);
+    setBatchEvalResult(null);
+    try {
+      const payload = JSON.parse(batchEvalInput);
+      const response = await axios.post(`${API_BASE}/evaluation/batch`, payload);
+      setBatchEvalResult(response.data);
+    } catch (error) {
+      console.error('Error batch evaluating:', error);
+      setBatchEvalResult(null);
+    } finally {
+      setBatchEvalLoading(false);
+    }
+  };
+  const prepareFineTuning = async () => {
+    setAdminLoading((s) => ({ ...s, ftPrepare: true }));
+    try {
+      const payload = JSON.parse(ftJsonInput);
+      await axios.post(`${API_BASE}/admin/fine-tuning/prepare`, payload);
+      const status = await axios.get(`${API_BASE}/admin/fine-tuning/status`);
+      setFtStatus(status.data);
+      setAdminMessage({ type: 'success', text: 'Fine-tuning dataset prepared.' });
+    } catch (error) {
+      console.error('Error preparing fine-tuning:', error);
+      setAdminMessage({ type: 'error', text: 'Failed to prepare fine-tuning dataset.' });
+    } finally {
+      setAdminLoading((s) => ({ ...s, ftPrepare: false }));
+    }
+  };
+  const runFineTuning = async () => {
+    setAdminLoading((s) => ({ ...s, ftRun: true }));
+    try {
+      await axios.post(`${API_BASE}/admin/fine-tuning/run`);
+      const status = await axios.get(`${API_BASE}/admin/fine-tuning/status`);
+      setFtStatus(status.data);
+      setAdminMessage({ type: 'success', text: 'Fine-tuning run finished.' });
+    } catch (error) {
+      console.error('Error running fine-tuning:', error);
+      setAdminMessage({ type: 'error', text: 'Fine-tuning run failed.' });
+    } finally {
+      setAdminLoading((s) => ({ ...s, ftRun: false }));
+    }
+  };
+  const refreshFineTuning = async () => {
+    setAdminLoading((s) => ({ ...s, ftRefresh: true }));
+    try {
+      const status = await axios.get(`${API_BASE}/admin/fine-tuning/status`);
+      setFtStatus(status.data);
+      setAdminMessage({ type: 'success', text: 'Fine-tuning status refreshed.' });
+    } catch (error) {
+      console.error('Error refreshing fine-tuning status:', error);
+      setAdminMessage({ type: 'error', text: 'Failed to refresh fine-tuning status.' });
+    } finally {
+      setAdminLoading((s) => ({ ...s, ftRefresh: false }));
     }
   };
 
@@ -154,11 +279,15 @@ function App() {
     try {
       const response = await axios.post(`${API_BASE}/ask`, {
         question: userMessage,
-        include_citations: true,
+        top_k: askTopK,
+        use_reranking: askUseRerank,
+        use_caching: askUseCache,
       });
 
       const answer = response.data.answer;
-      const citations = response.data.citations || [];
+      const citations = Array.from(
+        new Map((response.data.citations || []).map((c) => [c.source, c])).values()
+      );
 
       // Add assistant message
       setMessages((prev) => [
@@ -223,6 +352,12 @@ function App() {
           >
             RAG Ops
           </button>
+          <button
+            className={`tab ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin')}
+          >
+            Admin
+          </button>
         </div>
 
         {activeTab === 'upload' && (
@@ -265,9 +400,11 @@ function App() {
                   <div key={doc.id} className="file-item">
                     <div className="file-info">
                       <span className="file-name">{doc.title}</span>
-                      <span className="file-size">
-                        {formatFileSize(doc.file_size || 0)}
-                      </span>
+                      {typeof doc.file_size === 'number' && doc.file_size > 0 && (
+                        <span className="file-size">
+                          {formatFileSize(doc.file_size)}
+                        </span>
+                      )}
                     </div>
                     <button
                       className="btn btn-danger"
@@ -305,7 +442,7 @@ function App() {
                         <strong>Sources:</strong>
                         {msg.citations.map((cit, citIdx) => (
                           <span key={citIdx} className="citation">
-                            {cit.source} (score: {cit.score?.toFixed(2)})
+                            {cit.source} (score: {Math.max(0, Number(cit.score || 0)).toFixed(2)})
                           </span>
                         ))}
                       </div>
@@ -364,16 +501,30 @@ function App() {
                   Send
                 </button>
               </form>
+              <div className="ops-metrics" style={{ marginTop: '0.75rem' }}>
+                <div className="ops-metric">
+                  <span className="file-name">top_k</span>
+                  <input className="input" type="number" min="1" max="50" value={askTopK} onChange={(e) => setAskTopK(Number(e.target.value || 10))} />
+                </div>
+                <div className="ops-metric">
+                  <span className="file-name">rerank</span>
+                  <input type="checkbox" checked={askUseRerank} onChange={(e) => setAskUseRerank(e.target.checked)} />
+                </div>
+                <div className="ops-metric">
+                  <span className="file-name">cache</span>
+                  <input type="checkbox" checked={askUseCache} onChange={(e) => setAskUseCache(e.target.checked)} />
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {activeTab === 'ops' && (
-          <div className="card">
+          <div className="card ops-card">
             <h2>RAG Operations</h2>
 
-            <form onSubmit={runRetrievalTest} style={{ marginBottom: '1.5rem' }}>
-              <h3 style={{ marginBottom: '0.5rem' }}>Retrieval Inspector</h3>
+            <form onSubmit={runRetrievalTest} className="ops-section">
+              <h3>Retrieval Inspector</h3>
               <input
                 className="input"
                 type="text"
@@ -381,29 +532,29 @@ function App() {
                 onChange={(e) => setRetrievalQuery(e.target.value)}
                 placeholder="Enter a query to inspect retrieval quality"
               />
-              <button className="btn" type="submit" disabled={retrievalLoading}>
+              <button className="btn btn-primary" type="submit" disabled={retrievalLoading}>
                 {retrievalLoading ? 'Running...' : 'Run Retrieval'}
               </button>
             </form>
 
             {retrievalResults.length > 0 && (
-              <div className="file-list" style={{ marginBottom: '1.5rem' }}>
+              <div className="ops-list">
                 {retrievalResults.map((item) => (
-                  <div key={`${item.chunk_id}-${item.method}`} className="file-item">
-                    <div className="file-info">
-                      <span className="file-name">{item.source}</span>
+                  <div key={`${item.chunk_id}-${item.method}`} className="ops-item">
+                    <div className="ops-item-head">
+                      <span className="file-name">{item.source || 'unknown source'}</span>
                       <span className="file-size">
                         score {Number(item.score || 0).toFixed(3)} | {item.method}
                       </span>
-                      <span style={{ color: '#555', marginTop: 6 }}>{item.content}</span>
                     </div>
+                    <div className="ops-item-body">{item.content}</div>
                   </div>
                 ))}
               </div>
             )}
 
-            <form onSubmit={runEvaluation}>
-              <h3 style={{ marginBottom: '0.5rem' }}>RAG Evaluation</h3>
+            <form onSubmit={runEvaluation} className="ops-section">
+              <h3>RAG Evaluation</h3>
               <input
                 className="input"
                 type="text"
@@ -417,7 +568,6 @@ function App() {
                 value={evalGroundTruth}
                 onChange={(e) => setEvalGroundTruth(e.target.value)}
                 placeholder="Ground truth answer"
-                style={{ marginTop: '0.5rem' }}
               />
               <textarea
                 className="input"
@@ -425,25 +575,97 @@ function App() {
                 value={evalContexts}
                 onChange={(e) => setEvalContexts(e.target.value)}
                 placeholder="Retrieved contexts (one per line)"
-                style={{ marginTop: '0.5rem' }}
               />
-              <button className="btn" type="submit" disabled={evalLoading}>
+              <button className="btn btn-primary" type="submit" disabled={evalLoading}>
                 {evalLoading ? 'Evaluating...' : 'Run Evaluation'}
               </button>
             </form>
 
             {evalResult && (
-              <div className="file-list" style={{ marginTop: '1rem' }}>
+              <div className="ops-metrics">
                 {Object.entries(evalResult).map(([metric, value]) => (
-                  <div key={metric} className="file-item">
-                    <div className="file-info">
-                      <span className="file-name">{metric}</span>
-                      <span className="file-size">{Number(value).toFixed(4)}</span>
-                    </div>
+                  <div key={metric} className="ops-metric">
+                    <span className="file-name">{metric}</span>
+                    <span className="file-size">{Number(value).toFixed(4)}</span>
                   </div>
                 ))}
               </div>
             )}
+            <div className="ops-section">
+              <h3>Batch Evaluation</h3>
+              <textarea className="input" rows={6} value={batchEvalInput} onChange={(e) => setBatchEvalInput(e.target.value)} placeholder='[{"question":"...","ground_truth_answer":"...","retrieved_contexts":["..."]}]' />
+              <button className="btn btn-primary" onClick={runBatchEvaluation} disabled={batchEvalLoading}>
+                {batchEvalLoading ? 'Running...' : 'Run Batch Evaluation'}
+              </button>
+              {batchEvalResult && (
+                <div className="ops-item">
+                  <div className="ops-item-body">{JSON.stringify(batchEvalResult, null, 2)}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {activeTab === 'admin' && (
+          <div className="card ops-card">
+            <h2>Admin Controls</h2>
+            {adminMessage.text && (
+              <div className={adminMessage.type === 'error' ? 'error' : 'loading'}>
+                {adminMessage.text}
+              </div>
+            )}
+            <div className="ops-section">
+              <h3>System Status</h3>
+              <button className="btn btn-primary" onClick={fetchAdminStatus} disabled={adminLoading.status}>
+                {adminLoading.status ? 'Refreshing...' : 'Refresh Status'}
+              </button>
+              {adminStatus && (
+                <div className="ops-metrics">
+                  <div className="ops-metric"><span className="file-name">DB</span><span className="file-size">{adminStatus.services?.db ? 'up' : 'down'}</span></div>
+                  <div className="ops-metric"><span className="file-name">Redis</span><span className="file-size">{adminStatus.services?.redis ? 'up' : 'down'}</span></div>
+                  <div className="ops-metric"><span className="file-name">LangSmith</span><span className="file-size">{adminStatus.services?.langsmith ? 'enabled' : 'disabled'}</span></div>
+                </div>
+              )}
+            </div>
+            <div className="ops-section">
+              <h3>LLM Configuration</h3>
+              <input className="input" value={adminProvider} onChange={(e) => setAdminProvider(e.target.value)} placeholder="provider (ollama/openai)" />
+              <select className="input" value={adminModel} onChange={(e) => setAdminModel(e.target.value)}>
+                {supportedModels.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <div className="chat-input-container">
+                <button className="btn btn-primary" onClick={updateModel} disabled={adminLoading.model}>
+                  {adminLoading.model ? 'Updating...' : 'Update Model'}
+                </button>
+              </div>
+            </div>
+            <div className="ops-section">
+              <h3>Cache Control</h3>
+              <button className="btn btn-danger" onClick={clearCache} disabled={adminLoading.cache}>
+                {adminLoading.cache ? 'Clearing...' : 'Clear Cache'}
+              </button>
+            </div>
+            <div className="ops-section">
+              <h3>Fine-tuning</h3>
+              <textarea className="input" rows={6} value={ftJsonInput} onChange={(e) => setFtJsonInput(e.target.value)} placeholder='[{"question":"...","context":"...","answer":"..."}]' />
+              <div className="chat-input-container">
+                <button className="btn btn-primary" onClick={prepareFineTuning} disabled={adminLoading.ftPrepare}>
+                  {adminLoading.ftPrepare ? 'Preparing...' : 'Prepare Dataset'}
+                </button>
+                <button className="btn btn-primary" onClick={runFineTuning} disabled={adminLoading.ftRun}>
+                  {adminLoading.ftRun ? 'Running...' : 'Run Fine-tuning'}
+                </button>
+                <button className="btn" onClick={refreshFineTuning} disabled={adminLoading.ftRefresh}>
+                  {adminLoading.ftRefresh ? 'Refreshing...' : 'Refresh Status'}
+                </button>
+              </div>
+              {ftStatus && (
+                <div className="ops-item">
+                  <div className="ops-item-body">{JSON.stringify(ftStatus, null, 2)}</div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>

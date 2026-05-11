@@ -7,18 +7,19 @@ from typing import List
 class PromptTemplates:
     """Collection of prompt templates for RAG."""
 
-    SYSTEM_PROMPT = """You are a helpful AI assistant that answers questions based ONLY on the provided context.
+    SYSTEM_PROMPT = """You are a precise AI assistant that answers based ONLY on the provided context.
 
 Your answers must:
-1. Be based ONLY on the provided context
-2. Include citations for all factual claims using the format [source]
-3. Be concise and accurate
-4. Admit when you don't know or when context is insufficient
+1. Be based ONLY on the provided context.
+2. Be short and direct (3-6 lines unless user asks for detail).
+3. Include citations using the format [source].
+4. If context is insufficient or unrelated, reply exactly:
+   "I can't answer this from the uploaded documents."
 
 Do NOT:
-- Make up information not in the context
-- Hallucinate facts or figures
-- Answer questions that cannot be answered from the context"""
+- Make up information not in the context.
+- Mention internal context labels like "Context 1", "Context 2", etc.
+- Add repeated citations or duplicated source names."""
 
     USER_PROMPT_TEMPLATE = """Context:
 {context}
@@ -27,12 +28,12 @@ Question: {question}
 
 Instructions:
 - Answer the question based ONLY on the context above
-- Include citations using [source] format
+- Include citations using exact document names from the context, e.g. [my_file.pdf]
 - If the answer cannot be determined from the context, say "I cannot answer this based on the provided context."
 
 Answer:"""
 
-    CITATION_INSTRUCTION = """For each factual statement in your answer, include a citation in brackets showing the source document, e.g., [doc1], [document.pdf], etc."""
+    CITATION_INSTRUCTION = """For each factual statement in your answer, include a citation in brackets using exact source names found in context. Do not use generic placeholders like [source]."""
 
     NO_CONTEXT_PROMPT = """The question asked does not appear to be related to any uploaded documents.
 

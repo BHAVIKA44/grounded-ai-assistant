@@ -129,7 +129,7 @@ class LLMService:
         sources: List[str],
     ) -> tuple[str, List[str], float]:
         """Generate answer with citation enforcement."""
-        _ = sources  # Preserve signature while keeping behavior unchanged.
+        normalized_sources = [s for s in dict.fromkeys(sources) if s]
         system = (
             PromptTemplates.SYSTEM_PROMPT
             + "\n\n"
@@ -140,6 +140,24 @@ class LLMService:
             question, context_chunks, system_prompt=system
         )
         cited = extract_citations(answer)
+        lower_cited = {c.strip().lower() for c in cited}
+        generic = {"source", "sources", "document", "doc", "context"}
+        needs_rewrite = (not cited) or any(token in generic for token in lower_cited)
+        if needs_rewrite and normalized_sources:
+            source_label = normalized_sources[0]
+            if answer.endswith((".", "!", "?")):
+                answer = f"{answer} [{source_label}]"
+            else:
+                answer = f"{answer}. [{source_label}]"
+            cited = [source_label]
+        elif normalized_sources:
+            valid_sources = {s.lower(): s for s in normalized_sources}
+            filtered = []
+            for c in cited:
+                key = c.strip().lower()
+                if key in valid_sources:
+                    filtered.append(valid_sources[key])
+            cited = list(dict.fromkeys(filtered)) or normalized_sources[:1]
         return answer, cited, gen_time
 
 

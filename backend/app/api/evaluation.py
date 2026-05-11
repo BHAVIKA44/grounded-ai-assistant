@@ -9,6 +9,7 @@ from app.core.logging import get_logger
 from app.db.session import get_session_dependency
 from app.evaluation.rag_evaluator import RAGEvaluator, get_rag_evaluator
 from app.schemas.document import EvaluationRequest, EvaluationResponse
+from app.services.llm_service import get_llm_service
 
 logger = get_logger(__name__)
 
@@ -37,9 +38,17 @@ async def evaluate_rag(
         EvaluationResponse with metrics
     """
     try:
+        answer = (request.answer or "").strip()
+        if not answer:
+            llm_service = await get_llm_service()
+            answer, _ = await llm_service.generate(
+                question=request.question,
+                context_chunks=request.retrieved_contexts,
+            )
+
         result = await evaluator.evaluate(
             question=request.question,
-            answer="",  # Would come from actual answer in production
+            answer=answer,
             retrieved_contexts=request.retrieved_contexts,
             ground_truth=request.ground_truth_answer,
         )
@@ -70,9 +79,17 @@ async def evaluate_batch(
     results = []
 
     for eval_request in evaluations:
+        answer = (eval_request.answer or "").strip()
+        if not answer:
+            llm_service = await get_llm_service()
+            answer, _ = await llm_service.generate(
+                question=eval_request.question,
+                context_chunks=eval_request.retrieved_contexts,
+            )
+
         result = await evaluator.evaluate(
             question=eval_request.question,
-            answer="",
+            answer=answer,
             retrieved_contexts=eval_request.retrieved_contexts,
             ground_truth=eval_request.ground_truth_answer,
         )

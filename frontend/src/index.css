@@ -173,6 +173,85 @@ code {
   background-color: #c82333;
 }
 
+.input {
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #d7dbe0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  background: #fff;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.12);
+}
+
+.ops-card {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.ops-section {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #e6e8eb;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.ops-section h3 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 1rem;
+}
+
+.ops-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ops-item {
+  border: 1px solid #e6e8eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.875rem;
+}
+
+.ops-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ops-item-body {
+  margin-top: 0.5rem;
+  color: #4b5563;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+.ops-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.ops-metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #e6e8eb;
+  background: #fff;
+}
+
 /* Chat Section */
 .chat-container {
   display: flex;

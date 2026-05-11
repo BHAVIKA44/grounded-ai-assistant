@@ -30,7 +30,7 @@ class FineTuneConfig:
     lora_rank: int = 8
     lora_alpha: int = 16
     lora_dropout: float = 0.05
-    use_qlora: bool = True
+    use_qlora: bool = False
     learning_rate: float = 2e-4
     num_epochs: int = 3
     batch_size: int = 4
@@ -51,12 +51,14 @@ class FineTuningService:
     """Service for fine-tuning LLMs using LoRA/QLoRA."""
 
     def __init__(self, config: Optional[FineTuneConfig] = None):
+        self.logger = logger
         self.config = config or FineTuneConfig(
             model_name=settings.fine_tune_model_base,
             output_dir=settings.fine_tune_output_dir,
             lora_rank=settings.fine_tune_rank,
             lora_alpha=settings.fine_tune_alpha,
             lora_dropout=settings.fine_tune_dropout,
+            use_qlora=False,
         )
         self._model = None
         self._tokenizer = None
@@ -94,12 +96,15 @@ class FineTuningService:
 
         quantization_config = None
         if self.config.use_qlora:
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4",
-            )
+            try:
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4",
+                )
+            except Exception:
+                quantization_config = None
 
         self._model = AutoModelForCausalLM.from_pretrained(
             self.config.model_name,
@@ -164,17 +169,25 @@ class FineTuningService:
     async def fine_tune(self, dataset_path: str) -> str:
         """Fine-tune the model on the dataset."""
         logger.info("starting_fine_tune", dataset=dataset_path)
+        try:
+            model, _tokenizer = self.load_model_and_tokenizer()
+            model = self.setup_lora(model)
+            _training_args = self.get_training_args()
 
-        model, _tokenizer = self.load_model_and_tokenizer()
-        model = self.setup_lora(model)
-        _training_args = self.get_training_args()
-
-        logger.info(
-            "fine_tune_ready",
-            dataset=dataset_path,
-            output_dir=self.config.output_dir,
-        )
-        return self.config.output_dir
+            logger.info(
+                "fine_tune_ready",
+                dataset=dataset_path,
+                output_dir=self.config.output_dir,
+            )
+            return self.config.output_dir
+        except Exception:
+            logger.exception(
+                "fine_tune_failed",
+                dataset=dataset_path,
+                model_name=self.config.model_name,
+                output_dir=self.config.output_dir,
+            )
+            raise
 
     def merge_lora_weights(self, model_path: str, output_path: str) -> str:
         """Merge LoRA weights into base model."""

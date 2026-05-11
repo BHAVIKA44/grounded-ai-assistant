@@ -129,13 +129,25 @@ class CacheService:
             Number of keys deleted
         """
         try:
+            # Keys are stored as hashed strings, so logical patterns like "rag:*"
+            # cannot be matched directly in Redis. For those logical patterns,
+            # clear all cache entries.
+            redis_pattern = pattern
+            if pattern.startswith("rag:"):
+                redis_pattern = "*"
+
             keys = []
-            async for key in self.client.scan_iter(match=pattern):
+            async for key in self.client.scan_iter(match=redis_pattern):
                 keys.append(key)
 
             if keys:
                 await self.client.delete(*keys)
-                logger.info("cache_cleared", pattern=pattern, count=len(keys))
+                logger.info(
+                    "cache_cleared",
+                    pattern=pattern,
+                    redis_pattern=redis_pattern,
+                    count=len(keys),
+                )
 
             return len(keys)
 

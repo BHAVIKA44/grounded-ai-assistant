@@ -96,7 +96,7 @@ class DocumentService:
                 {
                     "document_id": document_id,
                     "source": chunk.source,
-                    "page": chunk.page,
+                    "page": chunk.page if chunk.page is not None else -1,
                     "chunk_index": chunk.chunk_index,
                     "document_title": title,
                     "document_type": document_type,
