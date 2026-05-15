@@ -16,11 +16,13 @@ from app.schemas.document import (
     ErrorResponse,
 )
 from app.services.document_service import document_service
+from app.workflow.document_orchestrator import DocumentOrchestrator
 
 logger = get_logger(__name__)
 settings = get_settings()
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
+document_orchestrator = DocumentOrchestrator()
 
 
 @router.post(
@@ -69,37 +71,20 @@ async def upload_document(
             detail=f"File too large. Maximum size: {settings.max_file_size_mb}MB",
         )
 
-    # Determine document type
-    if ext == "pdf":
-        doc_type = DocumentType.PDF
-    elif ext == "docx":
-        doc_type = DocumentType.DOCX
-    else:
-        # Map .txt extension to schema enum value "text"
-        doc_type = DocumentType.TEXT
-
     # Use filename as title if not provided
     doc_title = title or filename
 
     try:
-        # Decode content for text files
-        if doc_type == DocumentType.TEXT:
-            try:
-                content_text = content.decode("utf-8")
-            except UnicodeDecodeError:
-                content_text = content.decode("latin-1")
-        else:
-            content_text = filename
-
-        # Create document
-        document = await document_service.create_document(
-            session=session,
-            title=doc_title,
-            content=content_text,
-            document_type=doc_type.value,
-            filename=filename,
-            file_bytes=content,
+        state = await document_orchestrator.upload_graph.ainvoke(
+            {
+                "service": document_service,
+                "session": session,
+                "filename": filename,
+                "title": doc_title,
+                "content_bytes": content,
+            }
         )
+        document = state["document"]
 
         await session.commit()
 
@@ -263,7 +248,10 @@ async def delete_document(
         HTTPException: If document not found or deletion fails
     """
     try:
-        success = await document_service.delete_document(session, document_id)
+        state = await document_orchestrator.delete_graph.ainvoke(
+            {"service": document_service, "session": session, "document_id": document_id}
+        )
+        success = state["success"]
 
         if not success:
             raise HTTPException(status_code=404, detail="Document not found")

@@ -9,6 +9,7 @@ from app.core.logging import get_logger
 from app.evaluation.rag_evaluator import RAGEvaluator, get_rag_evaluator
 from app.schemas.document import EvaluationRequest, EvaluationResponse
 from app.services.llm_service import get_llm_service
+from app.workflow.evaluation_orchestrator import EvaluationOrchestrator
 
 logger = get_logger(__name__)
 
@@ -37,27 +38,23 @@ async def evaluate_rag(
         EvaluationResponse with metrics
     """
     try:
-        answer = (request.answer or "").strip()
-        if not answer:
-            llm_service = await get_llm_service()
-            answer, _ = await llm_service.generate(
-                question=request.question,
-                context_chunks=request.retrieved_contexts,
-            )
-
-        result = await evaluator.evaluate(
-            question=request.question,
-            answer=answer,
-            retrieved_contexts=request.retrieved_contexts,
-            ground_truth=request.ground_truth_answer,
+        llm_service = await get_llm_service()
+        orchestrator = EvaluationOrchestrator(evaluator, llm_service)
+        result = await orchestrator.run(
+            {
+                "question": request.question,
+                "answer": request.answer or "",
+                "retrieved_contexts": request.retrieved_contexts,
+                "ground_truth_answer": request.ground_truth_answer,
+            }
         )
 
         return EvaluationResponse(
-            faithfulness=result.faithfulness,
-            answer_relevancy=result.answer_relevancy,
-            context_precision=result.context_precision,
-            context_recall=result.context_recall,
-            overall_score=result.overall_score,
+            faithfulness=result["faithfulness"],
+            answer_relevancy=result["answer_relevancy"],
+            context_precision=result["context_precision"],
+            context_recall=result["context_recall"],
+            overall_score=result["overall_score"],
         )
 
     except GenerationError as e:
@@ -87,19 +84,15 @@ async def evaluate_batch(
     results = []
     try:
         for eval_request in evaluations:
-            answer = (eval_request.answer or "").strip()
-            if not answer:
-                llm_service = await get_llm_service()
-                answer, _ = await llm_service.generate(
-                    question=eval_request.question,
-                    context_chunks=eval_request.retrieved_contexts,
-                )
-
-            result = await evaluator.evaluate(
-                question=eval_request.question,
-                answer=answer,
-                retrieved_contexts=eval_request.retrieved_contexts,
-                ground_truth=eval_request.ground_truth_answer,
+            llm_service = await get_llm_service()
+            orchestrator = EvaluationOrchestrator(evaluator, llm_service)
+            result = await orchestrator.run(
+                {
+                    "question": eval_request.question,
+                    "answer": eval_request.answer or "",
+                    "retrieved_contexts": eval_request.retrieved_contexts,
+                    "ground_truth_answer": eval_request.ground_truth_answer,
+                }
             )
             results.append(result)
     except GenerationError as e:
@@ -116,11 +109,11 @@ async def evaluate_batch(
         )
 
     # Calculate averages
-    avg_faithfulness = sum(r.faithfulness for r in results) / len(results)
-    avg_relevancy = sum(r.answer_relevancy for r in results) / len(results)
-    avg_precision = sum(r.context_precision for r in results) / len(results)
-    avg_recall = sum(r.context_recall for r in results) / len(results)
-    avg_overall = sum(r.overall_score for r in results) / len(results)
+    avg_faithfulness = sum(r["faithfulness"] for r in results) / len(results)
+    avg_relevancy = sum(r["answer_relevancy"] for r in results) / len(results)
+    avg_precision = sum(r["context_precision"] for r in results) / len(results)
+    avg_recall = sum(r["context_recall"] for r in results) / len(results)
+    avg_overall = sum(r["overall_score"] for r in results) / len(results)
 
     return {
         "count": len(results),

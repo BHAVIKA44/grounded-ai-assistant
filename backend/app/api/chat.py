@@ -15,6 +15,7 @@ from app.retrieval.reranker import Reranker, get_reranker
 from app.schemas.document import AnswerRequest, AnswerResponse, Citation
 from app.services.cache_service import cache_key_question, get_cache_service
 from app.services.llm_service import get_llm_service
+from app.workflow.langgraph_orchestrator import LangGraphQAOrchestrator
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -64,92 +65,20 @@ async def ask_question(
             cached["cached"] = True
             return AnswerResponse(**cached)
 
-    # Retrieval phase
-    retrieval_start = time.perf_counter()
-
     try:
-        # Perform hybrid retrieval
-        retrieved_chunks = await hybrid_retrieval.retrieve(
-            query=request.question,
-            top_k=request.top_k,
-            use_bm25=True,
-            use_vector=True,
+        llm_service = await get_llm_service()
+        orchestrator = LangGraphQAOrchestrator(hybrid_retrieval, reranker, llm_service)
+        state = await orchestrator.run(
+            question=request.question,
+            top_k=request.top_k or 10,
             use_reranking=request.use_reranking,
         )
-
-        # Apply reranking if enabled
-        if request.use_reranking and retrieved_chunks:
-            retrieved_chunks = await reranker.rerank(
-                query=request.question,
-                chunks=retrieved_chunks,
-                top_k=settings.rerank_top_k,
-            )
-
-        retrieval_time = (time.perf_counter() - retrieval_start) * 1000
-
-        logger.info(
-            "retrieval_completed",
-            chunks_retrieved=len(retrieved_chunks),
-            retrieval_time_ms=retrieval_time,
-        )
-
-    except Exception as e:
+    except RetrievalError as e:
         logger.error("chat_retrieval_failed", error=str(e), question=request.question[:100])
         raise HTTPException(
             status_code=500,
-            detail={"code": RetrievalError(str(e)).code, "message": f"Retrieval failed: {str(e)}"},
+            detail={"code": e.code, "message": f"Retrieval failed: {str(e)}"},
         )
-
-    # Check if we have any context
-    if not retrieved_chunks:
-        logger.warning("no_context_found", question=request.question)
-        return AnswerResponse(
-            answer=OUT_OF_CONTEXT_MESSAGE,
-            question=request.question,
-            citations=[],
-            sources=[],
-            retrieval_time_ms=retrieval_time,
-            generation_time_ms=0,
-            total_time_ms=(time.perf_counter() - total_start) * 1000,
-            model_used="none",
-            cached=False,
-        )
-    top_score = retrieved_chunks[0].score if retrieved_chunks else 0.0
-    if top_score < 0.08:
-        logger.warning("low_retrieval_confidence", question=request.question, score=top_score)
-        return AnswerResponse(
-            answer=OUT_OF_CONTEXT_MESSAGE,
-            question=request.question,
-            citations=[],
-            sources=[],
-            retrieval_time_ms=retrieval_time,
-            generation_time_ms=0,
-            total_time_ms=(time.perf_counter() - total_start) * 1000,
-            model_used="none",
-            cached=False,
-        )
-
-    # Generation phase
-    generation_start = time.perf_counter()
-
-    try:
-        # Prepare context
-        retrieved_chunks = retrieved_chunks[: min(4, len(retrieved_chunks))]
-        context_chunks = [
-            f"[Source: {chunk.source}]\n{chunk.content}" for chunk in retrieved_chunks
-        ]
-        sources = list(dict.fromkeys(chunk.source for chunk in retrieved_chunks))
-
-        # Generate answer
-        llm_service = await get_llm_service()
-        answer, cited_sources, gen_time = await llm_service.generate_with_citations(
-            question=request.question,
-            context_chunks=context_chunks,
-            sources=sources,
-        )
-
-        generation_time = (time.perf_counter() - generation_start) * 1000
-
     except GenerationError as e:
         logger.error("chat_generation_failed", error=str(e), question=request.question[:100])
         raise HTTPException(
@@ -163,39 +92,17 @@ async def ask_question(
             detail={"code": "generation_error", "message": f"Generation failed: {str(e)}"},
         )
 
-    # Build citations
-    unique_citations = []
-    seen_sources = set()
-    for chunk in retrieved_chunks:
-        if chunk.source in seen_sources:
-            continue
-        seen_sources.add(chunk.source)
-        unique_citations.append(
-            Citation(
-                chunk_id=chunk.chunk_id,
-                content=chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content,
-                source=chunk.source,
-                score=chunk.score,
-                page=chunk.page,
-            )
-        )
-        if len(unique_citations) >= 5:
-            break
-    citations = unique_citations
-
-    # Calculate total time
     total_time = (time.perf_counter() - total_start) * 1000
 
-    # Build response
     response = AnswerResponse(
-        answer=answer,
+        answer=state.get("answer", OUT_OF_CONTEXT_MESSAGE),
         question=request.question,
-        citations=citations,
-        sources=sources,
-        retrieval_time_ms=retrieval_time,
-        generation_time_ms=generation_time,
+        citations=state.get("citations", []),
+        sources=state.get("sources", []),
+        retrieval_time_ms=state.get("retrieval_time_ms", 0.0),
+        generation_time_ms=state.get("generation_time_ms", 0.0),
         total_time_ms=total_time,
-        model_used=llm_service.model,
+        model_used=state.get("model_used", "none"),
         cached=False,
     )
 

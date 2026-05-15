@@ -1,6 +1,6 @@
 # Grounded AI Assistant
 
-Grounded AI Assistant is a FastAPI + React Retrieval-Augmented Generation (RAG) system designed. It supports document ingestion, hybrid retrieval, grounded answer generation with citations, evaluation workflows, and operational controls through an admin UI.
+Grounded AI Assistant is a FastAPI + React Retrieval-Augmented Generation (RAG) platform with LangGraph-based orchestration on core multi-step runtime flows. It supports document ingestion, hybrid retrieval, citation-grounded answer generation, evaluation workflows, and operational controls through an admin UI.
 
 ## Key Capabilities
 
@@ -12,6 +12,11 @@ Grounded AI Assistant is a FastAPI + React Retrieval-Augmented Generation (RAG) 
 - Redis response caching
 - RAG quality evaluation (single + batch)
 - Admin operations for model selection, cache control, system status, and fine-tuning controls
+- LangGraph orchestration for existing multi-step flows:
+  - Q&A runtime (`/api/v1/ask`)
+  - evaluation pipelines (`/api/v1/evaluation`, `/api/v1/evaluation/batch`)
+  - admin action workflows (LLM set/pull, fine-tuning prepare/run)
+  - document write workflows (upload/delete)
 - Multi-provider LLM support:
   - Local: `ollama`
   - Hosted: `groq` (free tier friendly), `openai`
@@ -24,6 +29,7 @@ backend/app/
 ├── core/          # config, settings, logging, typed exceptions
 ├── db/            # SQLAlchemy base/models/session
 ├── services/      # ingestion, llm, cache, parsing, chunking
+├── workflow/      # LangGraph orchestrators for runtime/admin/evaluation/doc writes
 ├── retrieval/     # bm25, hybrid, reranker
 ├── evaluation/    # rag evaluator
 ├── fine_tuning/   # trainer workflow
@@ -44,6 +50,7 @@ docker compose -f infra/docker-compose.yml up -d --build
 - Frontend: `http://localhost:3000`
 - Backend: `http://localhost:8000`
 - API docs: `http://localhost:8000/docs`
+- Frontend API base is configured via Docker Compose as `REACT_APP_API_URL=/api/v1`
 
 3. Verify health:
 
@@ -98,6 +105,7 @@ curl http://localhost:8000/health
 - Structured logging is enabled across request lifecycle and service boundaries.
 - Error responses are standardized with `code` + `message` in key APIs.
 - Citation handling is normalized to known source names from retrieved contexts.
+- Fine-tuning status in this project is workflow-scaffolded (dataset preparation, run control, status tracking), not a fully productionized end-to-end training pipeline yet.
 - Fine-tuning endpoint behavior depends on runtime:
   - GPU runtime: training path is initialized for LoRA workflow.
   - CPU-only runtime: API completes with a safe fallback artifact at `./models/lora/fine_tune_summary.json` to avoid hard failures.

@@ -12,12 +12,14 @@ from app.fine_tuning.trainer import get_fine_tuning_service
 from app.services.cache_service import get_cache_service
 from app.services.llm_service import LLMProvider, get_llm_service
 from app.services.observability import get_observability_service
+from app.workflow.admin_orchestrator import AdminOrchestrator
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 _fine_tune_state: Dict[str, Any] = {"status": "idle", "dataset_path": None, "output_path": None, "error": None}
 SUPPORTED_OLLAMA_MODELS = ["llama3.2", "phi3:mini", "qwen2.5:3b"]
 SUPPORTED_GROQ_MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"]
+admin_orchestrator = AdminOrchestrator()
 
 
 @router.get("/status")
@@ -82,57 +84,39 @@ async def llm_status() -> Dict[str, Any]:
 async def set_llm(provider: str = "ollama", model: str = "") -> Dict[str, Any]:
     svc = await get_llm_service()
     try:
-        svc.provider = LLMProvider(provider)
-    except ValueError as exc:
+        state = await admin_orchestrator.set_llm_graph.ainvoke(
+            {
+                "provider": provider,
+                "model": model,
+                "svc": svc,
+                "supported_ollama": SUPPORTED_OLLAMA_MODELS,
+                "supported_groq": SUPPORTED_GROQ_MODELS,
+            }
+        )
+    except (ValueError,) as exc:
         raise HTTPException(
             status_code=400,
             detail={"code": "validation_error", "message": str(exc)},
         )
-    if model:
-        if svc.provider == LLMProvider.OLLAMA and model not in SUPPORTED_OLLAMA_MODELS:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "validation_error",
-                    "message": f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_OLLAMA_MODELS)}",
-                },
-            )
-        if svc.provider == LLMProvider.GROQ and model not in SUPPORTED_GROQ_MODELS:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "validation_error",
-                    "message": f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_GROQ_MODELS)}",
-                },
-            )
-        svc.model = model
     return {
-        "provider": svc.provider,
-        "model": svc.model,
+        "provider": state["response"]["provider"],
+        "model": state["response"]["model"],
         "supported_models": SUPPORTED_OLLAMA_MODELS,
     }
 
 
 @router.post("/llm/pull")
 async def pull_llm_model(model: str) -> Dict[str, Any]:
-    if model not in SUPPORTED_OLLAMA_MODELS:
+    try:
+        state = await admin_orchestrator.pull_graph.ainvoke(
+            {"model": model, "supported_ollama": SUPPORTED_OLLAMA_MODELS}
+        )
+        return state["response"]
+    except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail={
-                "code": "validation_error",
-                "message": f"Unsupported model '{model}'. Use one of: {', '.join(SUPPORTED_OLLAMA_MODELS)}",
-            },
+            detail={"code": "validation_error", "message": str(exc)},
         )
-    settings = get_settings()
-    try:
-        async with httpx.AsyncClient(timeout=1200.0) as client:
-            response = await client.post(
-                f"{settings.ollama_base_url}/api/pull",
-                json={"name": model, "stream": False},
-            )
-        if response.status_code != 200:
-            raise ExternalServiceError(f"Ollama pull failed: {response.text}")
-        return {"pulled": True, "model": model}
     except ExternalServiceError as exc:
         logger.error("admin_llm_pull_failed", model=model, error=str(exc))
         raise HTTPException(
@@ -150,10 +134,10 @@ async def pull_llm_model(model: str) -> Dict[str, Any]:
 @router.post("/fine-tuning/prepare")
 async def prepare_fine_tuning(data: List[Dict[str, str]]) -> Dict[str, Any]:
     svc = await get_fine_tuning_service()
-    path = svc.prepare_dataset(data=data, output_path="/app/data/fine_tuning/train.jsonl")
-    _fine_tune_state["dataset_path"] = path
-    _fine_tune_state["status"] = "prepared"
-    return {"prepared": True, "dataset_path": path, "samples": len(data)}
+    state = await admin_orchestrator.ft_prepare_graph.ainvoke(
+        {"fine_tuning_service": svc, "dataset": data, "fine_tune_state": _fine_tune_state}
+    )
+    return state["response"]
 
 
 @router.post("/fine-tuning/run")
@@ -168,10 +152,19 @@ async def run_fine_tuning(dataset_path: str | None = None) -> Dict[str, Any]:
     _fine_tune_state["status"] = "running"
     _fine_tune_state["error"] = None
     try:
-        output = await svc.fine_tune(active_dataset)
-        _fine_tune_state["status"] = "completed"
-        _fine_tune_state["output_path"] = output
-        return {"status": "completed", "dataset_path": active_dataset, "output_path": output}
+        state = await admin_orchestrator.ft_run_graph.ainvoke(
+            {
+                "fine_tuning_service": svc,
+                "dataset_path": active_dataset,
+                "fine_tune_state": _fine_tune_state,
+            }
+        )
+        return state["response"]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "validation_error", "message": str(exc)},
+        )
     except Exception as exc:
         _fine_tune_state["status"] = "failed"
         _fine_tune_state["error"] = str(exc)

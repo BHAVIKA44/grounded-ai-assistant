@@ -80,7 +80,7 @@ services:
     ports:
       - "3000:80"
     environment:
-      - REACT_APP_API_URL=/api
+      - REACT_APP_API_URL=/api/v1
     depends_on:
       - backend
 
